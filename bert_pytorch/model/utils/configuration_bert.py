@@ -13,6 +13,7 @@ class BertConfig(object):
     """
     def __init__(self,
                  vocab_size_or_config_json_file,
+                 pad_token_id=0,
                  hidden_size=768,
                  num_hidden_layers=12,
                  num_attention_heads=12,
@@ -67,6 +68,7 @@ class BertConfig(object):
                 self.__dict__[key] = value
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
+            self.pad_token_id = pad_token_id
             self.hidden_size = hidden_size
             self.num_hidden_layers = num_hidden_layers
             self.num_attention_heads = num_attention_heads

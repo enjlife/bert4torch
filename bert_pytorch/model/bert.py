@@ -134,9 +134,9 @@ class BERT(nn.Module):
                     archive_file))
             return None
         if resolved_archive_file == archive_file:
-            logger.info("loading archive file {}".format(archive_file))
+            print("loading archive file {}".format(archive_file))
         else:
-            logger.info("loading archive file {} from cache at {}".format(
+            print("loading archive file {} from cache at {}".format(
                 archive_file, resolved_archive_file))
         tempdir = None
         if os.path.isdir(resolved_archive_file) or from_tf:
@@ -155,7 +155,7 @@ class BERT(nn.Module):
             # Backward compatibility with old naming format
             config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
         config = BertConfig.from_json_file(config_file)
-        logger.info("Model config {}".format(config))
+        print("Model config {}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:

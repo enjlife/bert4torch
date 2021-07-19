@@ -76,12 +76,12 @@ def cached_path(url_or_filename, cache_dir=None):
 
     parsed = urlparse(url_or_filename)
 
-    if parsed.scheme in ('http', 'https', 's3'):
-        # URL, so get it from the cache (downloading if necessary)
-        return get_from_cache(url_or_filename, cache_dir)
-    elif os.path.exists(url_or_filename):
+    if os.path.exists(url_or_filename):
         # File, and it exists.
         return url_or_filename
+    elif parsed.scheme in ('http', 'https', 's3'):
+        # URL, so get it from the cache (downloading if necessary)
+        return get_from_cache(url_or_filename, cache_dir)
     elif parsed.scheme == '':
         # File, but it doesn't exist.
         raise EnvironmentError("file {} not found".format(url_or_filename))
@@ -168,6 +168,7 @@ def get_from_cache(url, cache_dir=None):
     If it's not there, download it. Then return the path to the cached file.
     """
     if cache_dir is None:
+        # default path
         cache_dir = PYTORCH_PRETRAINED_BERT_CACHE
     if sys.version_info[0] == 3 and isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
