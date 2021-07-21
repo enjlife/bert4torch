@@ -64,7 +64,7 @@ def main():
     parser.add_argument('--num_qkv', default=0, type=int,
                         help="Number of different <Q,K,V>.")
     parser.add_argument('--seg_emb', action='store_true',
-                        help="Using segment embedding for self-attention.")
+                        help="Using segment embedding for self-encoder.")
 
     # decoding parameters
     parser.add_argument('--fp16', action='store_true',

@@ -1,6 +1,6 @@
 import unittest
 from bert_pytorch import BERT, BertConfig
-# from transformers import models
+from transformers import models
 #
 # class BERTVocabTestCase(unittest.TestCase):
 #     pass
@@ -8,3 +8,5 @@ from bert_pytorch import BERT, BertConfig
 # models.bert
 
 bert = BERT.from_pretrained(r'D:\\BERT-pytorch-master\\pretrained_model\\bert-base-chinese')
+
+print(bert)

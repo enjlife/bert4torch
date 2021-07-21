@@ -17,7 +17,7 @@ def train():
 
     parser.add_argument("-hs", "--hidden", type=int, default=256, help="hidden size of transformer model")
     parser.add_argument("-l", "--layers", type=int, default=8, help="number of layers")
-    parser.add_argument("-a", "--attn_heads", type=int, default=8, help="number of attention heads")
+    parser.add_argument("-a", "--attn_heads", type=int, default=8, help="number of encoder heads")
     parser.add_argument("-s", "--seq_len", type=int, default=20, help="maximum sequence len")
 
     parser.add_argument("-b", "--batch_size", type=int, default=64, help="number of batch_size")

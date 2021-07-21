@@ -4,7 +4,7 @@ from packaging import version
 from .token import TokenEmbedding
 from .position import PositionalEmbedding
 from .segment import SegmentEmbedding
-from ..utils import LayerNorm
+from ..utils import BertLayerNorm
 
 
 class BertEmbeddings(nn.Module):
@@ -18,7 +18,7 @@ class BertEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized

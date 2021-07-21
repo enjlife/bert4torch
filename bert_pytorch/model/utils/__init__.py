@@ -1,5 +1,4 @@
-from .feed_forward import PositionwiseFeedForward
-from .layer_norm import LayerNorm
+from .layer_norm import BertLayerNorm
 from .activations import act2fn
 from .configuration_bert import BertConfig
 from .load_weights import PRETRAINED_MODEL_ARCHIVE_MAP, \

@@ -43,7 +43,7 @@ class BertConfig(object):
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `BertModel`.
             hidden_size: Size of the encoder layers and the pooler layer.
             num_hidden_layers: Number of hidden layers in the Transformer encoder.
-            num_attention_heads: Number of attention heads for each attention layer in
+            num_attention_heads: Number of encoder heads for each encoder layer in
                 the Transformer encoder.
             intermediate_size: The size of the "intermediate" (i.e., feed-forward)
                 layer in the Transformer encoder.
@@ -51,7 +51,7 @@ class BertConfig(object):
                 encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
             hidden_dropout_prob: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob: The dropout ratio for the attention
+            attention_probs_dropout_prob: The dropout ratio for the encoder
                 probabilities.
             max_position_embeddings: The maximum sequence length that this model might
                 ever be used with. Typically set this to something large just in case

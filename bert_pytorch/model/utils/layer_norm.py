@@ -3,9 +3,9 @@ import torch
 
 
 # TODO: conditional layer normalization
-class LayerNorm(nn.Module):
+class BertLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-12):
-        super(LayerNorm, self).__init__()
+        super(BertLayerNorm, self).__init__()
 
         # in tf: weight: gamma, bias: beta
         # so when load weight in tf, need exchange

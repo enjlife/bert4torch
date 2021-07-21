@@ -1,13 +1,13 @@
 import os
+import sys
 import shutil
 import tarfile
 import tempfile
 import torch
 import torch.nn as nn
 
-from .transformer_block import TransformerBlock
 from .embedding import BertEmbeddings
-from .utils import LayerNorm, act2fn, BertConfig, load_tf_weights_in_bert
+from .utils import BertLayerNorm, act2fn, BertConfig, load_tf_weights_in_bert
 from .utils import PRETRAINED_MODEL_ARCHIVE_MAP, cached_path, CONFIG_NAME, \
                     BERT_CONFIG_NAME, get_logger, WEIGHTS_NAME, TF_WEIGHTS_NAME
 
@@ -15,7 +15,7 @@ from .utils import PRETRAINED_MODEL_ARCHIVE_MAP, cached_path, CONFIG_NAME, \
 logger = get_logger(__name__)
 
 
-class BERT(nn.Module):
+class Bert(nn.Module):
     """
     BERT model : Bidirectional Encoder Representations from Transformers.
     """
@@ -42,7 +42,7 @@ class BERT(nn.Module):
         self.mlm = MaskedLanguageModel(config, self.embedding.word_embeddings.weight) if config.with_mlm else None
 
     def forward(self, input_ids, token_type_ids):
-        # attention masking for padded token
+        # encoder masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
         # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
         # mask -> [batch_size, 1, 1, seq_len]
@@ -74,7 +74,7 @@ class BERT(nn.Module):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, LayerNorm):
+        elif isinstance(module, BertLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
@@ -173,6 +173,7 @@ class BERT(nn.Module):
         new_keys = []
         for key in state_dict.keys():
             new_key = None
+            # Layer Norm
             if 'gamma' in key:
                 new_key = key.replace('gamma', 'weight')
             if 'beta' in key:
@@ -214,6 +215,65 @@ class BERT(nn.Module):
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                 model.__class__.__name__, "\n\t".join(error_msgs)))
         return model
+
+
+class Pooler(nn.Module):
+    """ x[:,0] -> dense -> tanh
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class BertPredictionHeadTransform(nn.Module):
+    """MLM transform
+    linear -> activation -> layer_norm
+    """
+    def __init__(self, config):
+        super(BertPredictionHeadTransform, self).__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
+            self.transform_act_fn = act2fn[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class BertLMPredictionHead(nn.Module):
+    """
+    mlm: transform -> linear(shared weights)
+    """
+    def __init__(self, config, bert_model_embedding_weights):
+        super(BertLMPredictionHead, self).__init__()
+        self.transform = BertPredictionHeadTransform(config)
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(bert_model_embedding_weights.size(1),
+                                 bert_model_embedding_weights.size(0),
+                                 bias=False)
+        self.decoder.weight = bert_model_embedding_weights
+        self.bias = nn.Parameter(torch.zeros(bert_model_embedding_weights.size(0)))
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states) + self.bias
+        return hidden_states
 
 
 class NextSentencePrediction(nn.Module):
@@ -259,19 +319,4 @@ class MaskedLanguageModel(nn.Module):
         return x
 
 
-class Pooler(nn.Module):
-    """ x[:,0] -> dense -> tanh
-    """
-    def __init__(self, config):
-        super().__init__()
 
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output

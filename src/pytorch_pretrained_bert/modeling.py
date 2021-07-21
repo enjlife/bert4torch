@@ -84,7 +84,7 @@ class BertConfig(object):
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `BertModel`.
             hidden_size: Size of the encoder layers and the pooler layer.
             num_hidden_layers: Number of hidden layers in the Transformer encoder.
-            num_attention_heads: Number of attention heads for each attention layer in
+            num_attention_heads: Number of encoder heads for each encoder layer in
                 the Transformer encoder.
             intermediate_size: The size of the "intermediate" (i.e., feed-forward)
                 layer in the Transformer encoder.
@@ -92,7 +92,7 @@ class BertConfig(object):
                 encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
             hidden_dropout_prob: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob: The dropout ratio for the attention
+            attention_probs_dropout_prob: The dropout ratio for the encoder
                 probabilities.
             max_position_embeddings: The maximum sequence length that this model might
                 ever be used with. Typically set this to something large just in case
@@ -256,7 +256,7 @@ class BertSelfAttention(nn.Module):
         super(BertSelfAttention, self).__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
+                "The hidden size (%d) is not a multiple of the number of encoder "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads))
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(
@@ -331,7 +331,7 @@ class BertSelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer, mask_qkv)
         value_layer = self.transpose_for_scores(mixed_value_layer, mask_qkv)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
+        # Take the dot product between "query" and "key" to get the raw encoder scores.
         # (batch, head, pos, pos)
         attention_scores = torch.matmul(
             query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
@@ -347,10 +347,10 @@ class BertSelfAttention(nn.Module):
 
         # attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+        # Apply the encoder mask is (precomputed for all layers in BertModel forward() function)
         attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
+        # Normalize the encoder scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         if self.uni_debug_flag:
@@ -743,7 +743,7 @@ class PreTrainedBertModel(nn.Module):
         # different QKV
         if ('num_qkv' in kwargs) and kwargs['num_qkv']:
             config.num_qkv = kwargs['num_qkv']
-        # segment embedding for self-attention
+        # segment embedding for self-encoder
         if ('seg_emb' in kwargs) and kwargs['seg_emb']:
             config.seg_emb = kwargs['seg_emb']
         # initialize word embeddings
@@ -877,24 +877,24 @@ class PreTrainedBertModel(nn.Module):
             int(config.hidden_size / config.num_attention_heads)
         n_config_num_qkv = 1 if (config.num_qkv < 1) else config.num_qkv
         for qkv_name in ('query', 'key', 'value'):
-            _k = 'bert.encoder.layer.0.attention.self.{0}.weight'.format(
+            _k = 'bert.encoder.layer.0.encoder.self.{0}.weight'.format(
                 qkv_name)
             if (_k in state_dict) and (n_config_num_qkv*_all_head_size != state_dict[_k].shape[0]):
                 logger.info("n_config_num_qkv*_all_head_size != state_dict[_k] ({0}*{1} != {2})".format(
                     n_config_num_qkv, _all_head_size, state_dict[_k].shape[0]))
                 for layer_idx in range(config.num_hidden_layers):
-                    _k = 'bert.encoder.layer.{0}.attention.self.{1}.weight'.format(
+                    _k = 'bert.encoder.layer.{0}.encoder.self.{1}.weight'.format(
                         layer_idx, qkv_name)
                     assert state_dict[_k].shape[0] % _all_head_size == 0
                     n_state_qkv = int(state_dict[_k].shape[0]/_all_head_size)
                     assert (n_state_qkv == 1) != (n_config_num_qkv ==
                                                   1), "!!!!n_state_qkv == 1 xor n_config_num_qkv == 1!!!!"
                     if n_state_qkv == 1:
-                        _k = 'bert.encoder.layer.{0}.attention.self.{1}.weight'.format(
+                        _k = 'bert.encoder.layer.{0}.encoder.self.{1}.weight'.format(
                             layer_idx, qkv_name)
                         state_dict[_k].data = state_dict[_k].data.unsqueeze(0).repeat(
                             n_config_num_qkv, 1, 1).reshape((n_config_num_qkv*_all_head_size, _all_head_size))
-                        _k = 'bert.encoder.layer.{0}.attention.self.{1}.bias'.format(
+                        _k = 'bert.encoder.layer.{0}.encoder.self.{1}.bias'.format(
                             layer_idx, qkv_name)
                         state_dict[_k].data = state_dict[_k].data.unsqueeze(
                             0).repeat(n_config_num_qkv, 1).view(-1)
@@ -908,11 +908,11 @@ class PreTrainedBertModel(nn.Module):
                             _qkv_idx = 0
                         else:
                             _qkv_idx = 1
-                        _k = 'bert.encoder.layer.{0}.attention.self.{1}.weight'.format(
+                        _k = 'bert.encoder.layer.{0}.encoder.self.{1}.weight'.format(
                             layer_idx, qkv_name)
                         state_dict[_k].data = state_dict[_k].data.view(
                             n_state_qkv, _all_head_size, _all_head_size).select(0, _qkv_idx)
-                        _k = 'bert.encoder.layer.{0}.attention.self.{1}.bias'.format(
+                        _k = 'bert.encoder.layer.{0}.encoder.self.{1}.bias'.format(
                             layer_idx, qkv_name)
                         state_dict[_k].data = state_dict[_k].data.view(
                             n_state_qkv, _all_head_size).select(0, _qkv_idx)
@@ -971,17 +971,17 @@ class BertModel(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
 
     Outputs: Tuple of (encoded_layers, pooled_output)
         `encoded_layers`: controled by `output_all_encoded_layers` argument:
             - `output_all_encoded_layers=True`: outputs a list of the full sequences of encoded-hidden-states at the end
-                of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each
+                of each encoder block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each
                 encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size],
             - `output_all_encoded_layers=False`: outputs only the full sequence of hidden-states corresponding
-                to the last attention block of shape [batch_size, sequence_length, hidden_size],
+                to the last encoder block of shape [batch_size, sequence_length, hidden_size],
         `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a
             classifier pretrained on top of the hidden state associated to the first character of the
             input (`CLF`) to train on the Next-Sentence task (see BERT's paper).
@@ -1007,10 +1007,10 @@ class BertModel(PreTrainedBertModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
 
-        # We create a 3D attention mask from a 2D tensor mask.
+        # We create a 3D encoder mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-        # this attention mask is more simple than the triangular masking of causal attention
+        # this encoder mask is more simple than the triangular masking of causal encoder
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
         if attention_mask.dim() == 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
@@ -1083,7 +1083,7 @@ class BertForPreTraining(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
             with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
@@ -1767,7 +1767,7 @@ class BertForMaskedLM(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
             with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
@@ -1831,7 +1831,7 @@ class BertForNextSentencePrediction(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `next_sentence_label`: next sentence classification loss: torch.LongTensor of shape [batch_size]
             with indices selected in [0, 1].
@@ -1897,7 +1897,7 @@ class BertForSequenceClassification(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
             with indices selected in [0, ..., num_labels].
@@ -1973,7 +1973,7 @@ class BertForMultipleChoice(PreTrainedBertModel):
             and type 1 corresponds to a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, num_choices, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
             with indices selected in [0, ..., num_choices].
@@ -2044,7 +2044,7 @@ class BertForTokenClassification(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
             with indices selected in [0, ..., num_labels].
@@ -2127,7 +2127,7 @@ class BertForQuestionAnswering(PreTrainedBertModel):
             a `sentence B` token (see BERT paper for more details).
         `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
+            input sequence length in the current batch. It's the mask that we typically use for encoder when
             a batch has varying length sentences.
         `start_positions`: position of the first token for the labeled span: torch.LongTensor of shape [batch_size].
             Positions are clamped to the length of the sequence and position outside of the sequence are not taken

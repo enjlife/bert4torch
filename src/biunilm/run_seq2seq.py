@@ -131,7 +131,7 @@ def main():
     parser.add_argument("--hidden_dropout_prob", default=0.1, type=float,
                         help="Dropout rate for hidden states.")
     parser.add_argument("--attention_probs_dropout_prob", default=0.1, type=float,
-                        help="Dropout rate for attention probabilities.")
+                        help="Dropout rate for encoder probabilities.")
     parser.add_argument("--no_cuda",
                         action='store_true',
                         help="Whether not to use CUDA when available")
@@ -204,7 +204,7 @@ def main():
     parser.add_argument('--num_qkv', default=0, type=int,
                         help="Number of different <Q,K,V>.")
     parser.add_argument('--seg_emb', action='store_true',
-                        help="Using segment embedding for self-attention.")
+                        help="Using segment embedding for self-encoder.")
     parser.add_argument('--s2s_special_token', action='store_true',
                         help="New special tokens ([S2S_SEP]/[S2S_CLS]) of S2S.")
     parser.add_argument('--s2s_add_segment', action='store_true',
