@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 
 from .embedding import BertEmbeddings
+from .encoder import BertEncoder
 from .utils import BertLayerNorm, act2fn, BertConfig, load_tf_weights_in_bert
 from .utils import PRETRAINED_MODEL_ARCHIVE_MAP, cached_path, CONFIG_NAME, \
                     BERT_CONFIG_NAME, get_logger, WEIGHTS_NAME, TF_WEIGHTS_NAME
@@ -34,8 +35,8 @@ class Bert(nn.Module):
         self.hidden_size = config.hidden_size
         # embedding for BERT, sum of positional, segment, token embeddings
         self.embedding = BertEmbeddings(config)
-        # multi-layers transformer blocks
-        self.transformer_blocks = nn.ModuleList([TransformerBlock(config) for _ in range(self.num_hidden_layers)])
+        # transformer encoder
+        self.encoder = BertEncoder(config)
 
         self.pooler = Pooler(config) if config.with_pool else None
         self.nsp = NextSentencePrediction(config) if config.with_nsp else None
@@ -304,7 +305,7 @@ class MaskedLanguageModel(nn.Module):
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.act_fn = act2fn.get(config.hidden_act, 'gelu')
-        self.norm = LayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.norm = BertLayerNorm(config.hidden_size, config.layer_norm_eps)
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder = nn.Linear(embedding_weights.size(1), embedding_weights.size(0), bias=False)

@@ -1,2 +1,2 @@
-from .attention import MultiHeadedAttention
+from .encoder import BertEncoder
 
