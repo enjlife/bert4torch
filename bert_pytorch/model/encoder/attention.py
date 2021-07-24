@@ -11,8 +11,8 @@ class BertAttention(nn.Module):
         self.self = MultiHeadedSelfAttention(config)
         self.output = AttentionOutput(config)
 
-    def forward(self, x, v_mask):
-        self_output = self.self(x, v_mask)
+    def forward(self, x, attention_mask):
+        self_output = self.self(x, attention_mask)
         # dense -> dropout -> add -> norm
         attention_output = self.output(self_output, x)
         return attention_output
