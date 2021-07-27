@@ -36,6 +36,7 @@ class BertConfig(object):
                  with_pool=False,
                  with_nsp=False,
                  with_mlm=False,
+                 with_unilm=False,
                  ):
         """Constructs BertConfig.
 
@@ -91,6 +92,7 @@ class BertConfig(object):
             self.with_pool = with_pool,
             self.with_nsp = with_nsp,
             self.with_mlm = with_mlm,
+            self.with_unilm = with_unilm
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")

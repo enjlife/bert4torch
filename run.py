@@ -7,6 +7,7 @@ from importlib import import_module
 import argparse
 from utils import build_dataset, build_iterator, get_time_dif
 
+
 parser = argparse.ArgumentParser(description='Chinese Text Classification')
 parser.add_argument('--model', type=str, required=True, help='choose a model: Bert, ERNIE')
 args = parser.parse_args()
@@ -18,6 +19,7 @@ if __name__ == '__main__':
     model_name = args.model  # bert
     x = import_module('models.' + model_name)
     config = x.Config(dataset)
+
     np.random.seed(1)
     torch.manual_seed(1)
     torch.cuda.manual_seed_all(1)

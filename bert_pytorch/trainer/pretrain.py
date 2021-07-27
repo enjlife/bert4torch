@@ -3,24 +3,21 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
-from ..model import BERTLM, BERT
+from ..model import BertConfig, BertModel, BertForPreTraining, BertForMaskedLM, \
+    BertForNextSentencePrediction, BertForSequenceClassification
 from .optim_schedule import ScheduledOptim
 
 import tqdm
 
 
-class BERTTrainer:
+class BERTTrainer(object):
     """
     BERTTrainer make the pretrained BERT model with two LM training method.
-
         1. Masked Language Model : 3.3.1 Task #1: Masked LM
         2. Next Sentence prediction : 3.3.2 Task #2: Next Sentence Prediction
-
-    please check the details on README.md with simple example.
-
     """
 
-    def __init__(self, bert: BERT, vocab_size: int,
+    def __init__(self, model, vocab_size: int,
                  train_dataloader: DataLoader, test_dataloader: DataLoader = None,
                  lr: float = 1e-4, betas=(0.9, 0.999), weight_decay: float = 0.01, warmup_steps=10000,
                  with_cuda: bool = True, cuda_devices=None, log_freq: int = 10):
@@ -41,9 +38,9 @@ class BERTTrainer:
         self.device = torch.device("cuda:0" if cuda_condition else "cpu")
 
         # This BERT model will be saved every epoch
-        self.bert = bert
+        # self.bert = bert
         # Initialize the BERT Language Model, with BERT model
-        self.model = BERTLM(bert, vocab_size).to(self.device)
+        self.model = model.to(self.device)
 
         # Distributed GPU training if CUDA can detect more than 1 GPU
         if with_cuda and torch.cuda.device_count() > 1:
@@ -97,19 +94,14 @@ class BERTTrainer:
         for i, data in data_iter:
             # 0. batch_data will be sent into the device(GPU or cpu)
             data = {key: value.to(self.device) for key, value in data.items()}
-
             # 1. forward the next_sentence_prediction and masked_lm model
             next_sent_output, mask_lm_output = self.model.forward(data["bert_input"], data["segment_label"])
-
             # 2-1. NLL(negative log likelihood) loss of is_next classification result
             next_loss = self.criterion(next_sent_output, data["is_next"])
-
             # 2-2. NLLLoss of predicting masked token word
             mask_loss = self.criterion(mask_lm_output.transpose(1, 2), data["bert_label"])
-
             # 2-3. Adding next_loss and mask_loss : 3.4 Pre-training Procedure
             loss = next_loss + mask_loss
-
             # 3. backward and optimization only in train
             if train:
                 self.optim_schedule.zero_grad()

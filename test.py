@@ -1,6 +1,7 @@
 import unittest
 from bert_pytorch import BERT, BertConfig
 from transformers import models
+from bert4keras import models
 #
 # class BERTVocabTestCase(unittest.TestCase):
 #     pass
