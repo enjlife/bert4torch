@@ -11,11 +11,6 @@ import tqdm
 
 
 class BERTTrainer(object):
-    """
-    BERTTrainer make the pretrained BERT model with two LM training method.
-        1. Masked Language Model : 3.3.1 Task #1: Masked LM
-        2. Next Sentence prediction : 3.3.2 Task #2: Next Sentence Prediction
-    """
 
     def __init__(self, model, vocab_size: int,
                  train_dataloader: DataLoader, test_dataloader: DataLoader = None,
