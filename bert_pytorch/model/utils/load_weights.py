@@ -7,7 +7,7 @@ from tqdm import tqdm
 import os
 import sys
 import warnings
-from dataclasses import dataclass
+# from dataclasses import dataclass
 from typing import Optional, Tuple
 from functools import wraps
 import shutil

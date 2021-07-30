@@ -1,31 +1,30 @@
 # coding: UTF-8
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from sklearn import metrics
 import time
 from utils import get_time_dif
-from pytorch_pretrained.optimization import BertAdam
+from bert_pytorch import BertAdam
 
 
 # 权重初始化，默认xavier
-def init_network(model, method='xavier', exclude='embedding', seed=123):
-    for name, w in model.named_parameters():
-        if exclude not in name:
-            if len(w.size()) < 2:
-                continue
-            if 'weight' in name:
-                if method == 'xavier':
-                    nn.init.xavier_normal_(w)
-                elif method == 'kaiming':
-                    nn.init.kaiming_normal_(w)
-                else:
-                    nn.init.normal_(w)
-            elif 'bias' in name:
-                nn.init.constant_(w, 0)
-            else:
-                pass
+# def init_network(model, method='xavier', exclude='embedding', seed=123):
+#     for name, w in model.named_parameters():
+#         if exclude not in name:
+#             if len(w.size()) < 2:
+#                 continue
+#             if 'weight' in name:
+#                 if method == 'xavier':
+#                     nn.init.xavier_normal_(w)
+#                 elif method == 'kaiming':
+#                     nn.init.kaiming_normal_(w)
+#                 else:
+#                     nn.init.normal_(w)
+#             elif 'bias' in name:
+#                 nn.init.constant_(w, 0)
+#             else:
+#                 pass
 
 
 def train(config, model, train_iter, dev_iter, test_iter):
@@ -33,6 +32,8 @@ def train(config, model, train_iter, dev_iter, test_iter):
     model.train()
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    # set lambda of weight_decay(l2 re): 0.01
+    # batch_norm or layer_norm or bias : lambda=0
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
@@ -74,7 +75,7 @@ def train(config, model, train_iter, dev_iter, test_iter):
             total_batch += 1
             if total_batch - last_improve > config.require_improvement:
                 # 验证集loss超过1000batch没下降，结束训练
-                print("No optimization for a long time, auto-stopping...")
+                print(f"No optimization for {config.require_improvement} batches, auto-stopping...")
                 flag = True
                 break
         if flag:

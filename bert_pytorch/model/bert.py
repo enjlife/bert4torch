@@ -187,10 +187,10 @@ class BertPreTrainedModel(nn.Module):
             start_prefix = 'bert.'
         load(model, prefix=start_prefix)
         if len(missing_keys) > 0:
-            logger.info("Weights of {} not initialized from pretrained model: {}".format(
+            print("Weights of {} not initialized from pretrained model: {}".format(
                 model.__class__.__name__, missing_keys))
         if len(unexpected_keys) > 0:
-            logger.info("Weights from pretrained model not used in {}: {}".format(
+            print("Weights from pretrained model not used in {}: {}".format(
                 model.__class__.__name__, unexpected_keys))
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
