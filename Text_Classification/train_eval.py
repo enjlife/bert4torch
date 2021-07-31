@@ -42,10 +42,10 @@ def train(config, model, train_iter, dev_iter, test_iter):
                          lr=config.learning_rate,
                          warmup=0.05,
                          t_total=len(train_iter) * config.num_epochs)
-    total_batch = 0  # 记录进行到多少batch
-    dev_best_loss = float('inf')
-    last_improve = 0  # 记录上次验证集loss下降的batch数
-    flag = False  # 记录是否很久没有效果提升
+    total_batch = 0                 # 记录进行到多少batch
+    dev_best_loss = float('inf')    # dev 最小loss
+    last_improve = 0                # 记录上次验证集loss下降的batch数
+    flag = False                    # 记录是否很久没有效果提升
     model.train()
     for epoch in range(config.num_epochs):
         print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))

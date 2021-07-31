@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class BertConfig(object):
-    """Configuration class to store the configuration of a `BertModel`.
+    """Configuration class to store the configuration of a `BertModel`. Usually used in from_pretrained.
     """
     def __init__(self,
                  vocab_size_or_config_json_file,
@@ -33,9 +33,6 @@ class BertConfig(object):
                  label_smoothing=None,
                  num_qkv=0,
                  seg_emb=False,
-                 with_pool=False,
-                 with_nsp=False,
-                 with_mlm=False,
                  with_unilm=False,
                  ):
         """Constructs BertConfig.
@@ -67,6 +64,8 @@ class BertConfig(object):
                 json_config = json.loads(reader.read())
             for key, value in json_config.items():
                 self.__dict__[key] = value
+            self.with_unilm = with_unilm
+
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
             self.pad_token_id = pad_token_id
@@ -89,9 +88,6 @@ class BertConfig(object):
             self.label_smoothing = label_smoothing
             self.num_qkv = num_qkv
             self.seg_emb = seg_emb
-            self.with_pool = with_pool,
-            self.with_nsp = with_nsp,
-            self.with_mlm = with_mlm,
             self.with_unilm = with_unilm
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"

@@ -40,7 +40,7 @@ log_levels = {
     "critical": logging.CRITICAL,
 }
 
-_default_log_level = logging.WARNING
+_default_log_level = logging.INFO
 
 
 def _get_default_logging_level():
@@ -109,10 +109,8 @@ def get_log_levels_dict():
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
     Return a logger with the specified name.
-
     This function is not supposed to be directly accessed unless you are writing a custom transformers module.
     """
-
     if name is None:
         name = _get_library_name()
 

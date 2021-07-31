@@ -2,6 +2,7 @@ import sys
 import torch.nn as nn
 from ..utils import act2fn
 from ..utils import BertLayerNorm
+# Position wise Feed Forward Network
 
 
 class BertIntermediate(nn.Module):

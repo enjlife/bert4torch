@@ -97,9 +97,10 @@ class BertPreTrainedModel(nn.Module):
         kwargs.pop('from_tf', None)
 
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
-            # archive: url or local path
+            # archive_file: url
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
         else:
+            # archive_file: local path
             archive_file = pretrained_model_name_or_path
         # redirect to the cache, if necessary
         try:
@@ -115,9 +116,9 @@ class BertPreTrainedModel(nn.Module):
                     archive_file))
             return None
         if resolved_archive_file == archive_file:
-            print("loading archive file {}".format(archive_file))
+            logger.info("loading archive file {}".format(archive_file))
         else:
-            print("loading archive file {} from cache at {}".format(
+            logger.info("loading archive file {} from cache at {}".format(
                 archive_file, resolved_archive_file))
         tempdir = None
         if os.path.isdir(resolved_archive_file) or from_tf:
@@ -136,7 +137,7 @@ class BertPreTrainedModel(nn.Module):
             # Backward compatibility with old naming format
             config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
         config = BertConfig.from_json_file(config_file)
-        print("Model config {}".format(config))
+        logger.info("Model config \n{}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
@@ -177,7 +178,7 @@ class BertPreTrainedModel(nn.Module):
         def load(module, prefix=''):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
             module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + '.')
@@ -187,14 +188,14 @@ class BertPreTrainedModel(nn.Module):
             start_prefix = 'bert.'
         load(model, prefix=start_prefix)
         if len(missing_keys) > 0:
-            print("Weights of {} not initialized from pretrained model: {}".format(
-                model.__class__.__name__, missing_keys))
+            logger.warning("Weights of {} not initialized from pretrained model: {}".format(
+                            model.__class__.__name__, missing_keys))
         if len(unexpected_keys) > 0:
-            print("Weights from pretrained model not used in {}: {}".format(
-                model.__class__.__name__, unexpected_keys))
+            logger.warning("Weights from pretrained model not used in {}: {}".format(
+                            model.__class__.__name__, unexpected_keys))
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
-                model.__class__.__name__, "\n\t".join(error_msgs)))
+                                model.__class__.__name__, "\n\t".join(error_msgs)))
         return model
 
 
@@ -251,8 +252,6 @@ class BertModel(BertPreTrainedModel):
         self.encoder = BertEncoder(config)
         self.pooler = Pooler(config)  # if config.with_pool or config.with_nsp else None
         self.apply(self.init_bert_weights)
-        # self.nsp = BertNSPHead(config) if config.with_nsp else None
-        # self.mlm = BertMLMHead(config, self.embeddings.word_embeddings.weight) if config.with_mlm else None
 
     def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layer=False):
         # encoder masking for padded token

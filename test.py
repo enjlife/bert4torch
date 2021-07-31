@@ -1,7 +1,7 @@
 import unittest
 from bert4keras.models import build_transformer_model
 # from bert_pytorch import BERT, BertConfig
-# from transformers import models
+from transformers.models import bert
 from bert4keras import models
 from bert_pytorch import BertModel
 #
@@ -10,8 +10,8 @@ from bert_pytorch import BertModel
 #
 # models.bert
 
-bert = BertModel.from_pretrained('bert-base-chinese', **{'cache_dir': r'pretrained_model/bert-base-chinese'})
-
+# bert = BertModel.from_pretrained('bert-base-chinese', **{'cache_dir': r'pretrained_model/bert-base-chinese'})
+print(__name__)
 
 # bert = build_transformer_model(
 #     config_path=config_path,
