@@ -1,7 +1,9 @@
 # coding: UTF-8
+import os
 import torch
 from tqdm import tqdm
 import time
+import random
 from datetime import timedelta
 
 PAD, CLS = '[PAD]', '[CLS]'  # padding符号, bert中综合信息符号
@@ -96,5 +98,46 @@ def get_time_dif(start_time):
     return timedelta(seconds=int(round(time_dif)))
 
 
-def process_thunews(path):
-    pass
+def process_thucnews(ipath, opath):
+    dirs = os.listdir(ipath)
+    for label in dirs:
+        f_out = open(os.path.join(opath, label), 'w')
+        label_dir = os.path.join(ipath, label)
+        if not os.path.isdir(label_dir):
+            continue
+        for file in tqdm(os.listdir(label_dir)):
+            title = open(os.path.join(label_dir, file), 'r').readlines()
+            if len(title) == 0:
+                continue
+            f_out.write(title[0])
+        f_out.close()
+
+
+def gen_train_dev_test(ipath, opath):
+    label_list = ['财经', '房产', '股票', '教育', '科技', '社会', '时政', '体育', '游戏', '娱乐']
+    data = []
+    for idx, label in enumerate(label_list):
+        file = os.path.join(ipath, label)
+        with open(file, 'r') as f:
+            for line in f:
+                line = line.strip() + '\t' + str(idx)
+                data.append(line)
+    random.shuffle(data)
+    with open(os.path.join(opath, 'dev.txt'), 'w') as f:
+        for line in data[:10000]:
+            f.write(line + '\n')
+    with open(os.path.join(opath, 'test.txt'), 'w') as f:
+        for line in data[10000:20000]:
+            f.write(line + '\n')
+    with open(os.path.join(opath, 'train.txt'), 'w') as f:
+        for line in data[20000:]:
+            f.write(line + '\n')
+    return
+
+
+if __name__ == '__main__':
+    in_path = '/Users/enjlife/Desktop/data/THUCNews/'
+    out_path1 = '/Users/enjlife/Desktop/data/THUCNewsTitles/'
+    # process_thucnews(in_path, out_path1)
+    out_path2 = '/Users/enjlife/Desktop/data/THUCNewsTextClassification/'
+    gen_train_dev_test(out_path1, out_path2)
