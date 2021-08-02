@@ -19,7 +19,7 @@ class Config(object):
         self.model_name = 'bert'
         self.train_path = '../data/' + dataset + '/train.txt'
         self.dev_path = '../data/' + dataset + '/dev.txt'
-        self.test_path = '../data/' + dataset + '/train.txt'
+        self.test_path = '../data/' + dataset + '/test.txt'
         self.class_list = [x.strip() for x in open('../data/' + dataset + 'class.txt').readlines()]  # 类别名单
         self.save_path = dataset + '/saved_dict/' + self.model_name + '.ckpt'        # 模型训练结果
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   # 设备

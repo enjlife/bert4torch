@@ -260,6 +260,8 @@ class BertModel(BertPreTrainedModel):
         # mask -> [batch_size, 1, 1, seq_len]
         if attention_mask is None:
             attention_mask = (input_ids > 0).unsqueeze(1).unsqueeze(1)
+        else:
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
         if self.config.with_unilm:
@@ -267,6 +269,8 @@ class BertModel(BertPreTrainedModel):
             pass
         emb_output = self.embeddings(input_ids, token_type_ids)
         encoder_layers = self.encoder(emb_output, attention_mask, output_all_encoded_layer=output_all_encoded_layer)
+        if not output_all_encoded_layer:
+            encoder_layers = encoder_layers[-1]
         pooled_output = self.pooler(encoder_layers)
 
         return encoder_layers, pooled_output
@@ -456,7 +460,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
-        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layer=False)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
