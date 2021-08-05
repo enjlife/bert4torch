@@ -50,7 +50,7 @@ def train(config, model, train_iter, dev_iter, test_iter):
     for epoch in range(config.num_epochs):
         print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
         for i, (trains, labels) in enumerate(train_iter):
-            outputs = model(trains)
+            outputs = model(*trains)
             model.zero_grad()
             loss = F.cross_entropy(outputs, labels)
             loss.backward()
@@ -105,8 +105,8 @@ def evaluate(config, model, data_iter, test=False):
     predict_all = np.array([], dtype=int)
     labels_all = np.array([], dtype=int)
     with torch.no_grad():
-        for texts, labels in data_iter:
-            outputs = model(texts)
+        for tests, labels in data_iter:
+            outputs = model(*tests)
             loss = F.cross_entropy(outputs, labels)
             loss_total += loss
             labels = labels.data.cpu().numpy()

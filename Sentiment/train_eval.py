@@ -102,17 +102,19 @@ def test(config, model, test_iter):
 
 
 def evaluate(config, model, data_iter, test=False):
+    pos_id = config.tokenizer.vocab['很']
+    neg_id = config.tokenizer.vocab['不']
     model.eval()
     loss_total = 0
     predict_all = np.array([], dtype=int)
     labels_all = np.array([], dtype=int)
     with torch.no_grad():
-        for texts, labels in data_iter:
-            outputs = model(texts)
-            loss = F.cross_entropy(outputs, labels)
+        for tests, (labels, label_ids) in data_iter:
+            outputs = model(*tests)  # get mask_id
+            loss = F.cross_entropy(outputs, label_ids)
             loss_total += loss
             labels = labels.data.cpu().numpy()
-            predic = torch.max(outputs.data, 1)[1].cpu().numpy()
+            predic = torch.max(outputs[:, 1, [pos_id, neg_id]].data, 1)[1].cpu().numpy()
             labels_all = np.append(labels_all, labels)
             predict_all = np.append(predict_all, predic)
 

@@ -17,6 +17,7 @@ def build_dataset(config):
         mask_id = config.tokenizer.vocab[MASK]
         pos_id = config.tokenizer.vocab['很']
         neg_id = config.tokenizer.vocab['不']
+        label_ids = [pos_id, neg_id]
         contents = []
         with open(path, 'r', encoding='UTF-8') as f:
             for line in tqdm(f):
@@ -28,7 +29,7 @@ def build_dataset(config):
                 token = config.tokenizer.tokenize(content)
                 token = [CLS] + token
                 token[mask_idx] = mask_id  # 'CLS MASK ...'
-                seq_len = len(token)
+                # seq_len = len(token)
                 mask = []
                 token_ids = config.tokenizer.convert_tokens_to_ids(token)
 
@@ -39,8 +40,9 @@ def build_dataset(config):
                     else:
                         mask = [1] * max_len
                         token_ids = token_ids[:max_len]
-                        seq_len = max_len
-                contents.append((token_ids, int(label), seq_len, mask))
+                        # seq_len = max_len
+                token_type_ids = [0] * max_len
+                contents.append((token_ids, int(label), token_type_ids, mask, label_ids[int(label)]))
         return contents
     train, dev = None, None
     test = load_dataset(config.test_path, config.pad_size)
@@ -62,12 +64,12 @@ class DatasetIterater(object):
         self.device = device
 
     def _to_tensor(self, datas):
-        x = torch.LongTensor([data[0] for data in datas]).to(self.device)
+        token_ids = torch.LongTensor([data[0] for data in datas]).to(self.device)
         y = torch.LongTensor([data[1] for data in datas]).to(self.device)
-        # pad前的长度(超过pad_size的设为pad_size)
-        seq_len = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        token_type_ids = torch.LongTensor([data[2] for data in datas]).to(self.device)
         mask = torch.LongTensor([data[3] for data in datas]).to(self.device)
-        return (x, seq_len, mask), y
+        label_ids = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        return (token_ids, token_type_ids, mask), (y, label_ids)
 
     def __next__(self):
         if self.residue and self.index == self.n_batches:

@@ -21,7 +21,6 @@ def build_dataset(config):
                 content, label = lin.split('\t')
                 token = config.tokenizer.tokenize(content)
                 token = [CLS] + token
-                seq_len = len(token)
                 mask = []
                 token_ids = config.tokenizer.convert_tokens_to_ids(token)
 
@@ -32,12 +31,12 @@ def build_dataset(config):
                     else:
                         mask = [1] * max_len
                         token_ids = token_ids[:max_len]
-                        seq_len = max_len
-                contents.append((token_ids, int(label), seq_len, mask))
+                token_type_ids = [0] * max_len
+                contents.append((token_ids, int(label), token_type_ids, mask))
         return contents
-    train = load_dataset(config.train_path, config.pad_size)
-    dev = load_dataset(config.dev_path, config.pad_size)
-    test = load_dataset(config.test_path, config.pad_size)
+    train = load_dataset(config.train_path, config.max_len)
+    dev = load_dataset(config.dev_path, config.max_len)
+    test = load_dataset(config.test_path, config.max_len)
     return train, dev, test
 
 
@@ -53,12 +52,11 @@ class DatasetIterater(object):
         self.device = device
 
     def _to_tensor(self, datas):
-        x = torch.LongTensor([data[0] for data in datas]).to(self.device)
+        token_ids = torch.LongTensor([data[0] for data in datas]).to(self.device)
         y = torch.LongTensor([data[1] for data in datas]).to(self.device)
-        # pad前的长度(超过pad_size的设为pad_size)
-        seq_len = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        token_type_ids = torch.LongTensor([data[2] for data in datas]).to(self.device)
         mask = torch.LongTensor([data[3] for data in datas]).to(self.device)
-        return (x, seq_len, mask), y
+        return (token_ids, token_type_ids, mask), y
 
     def __next__(self):
         if self.residue and self.index == self.n_batches:
