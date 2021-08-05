@@ -52,7 +52,7 @@ def train(config, model, train_iter, dev_iter, test_iter):
     for epoch in range(config.num_epochs):
         print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
         for i, (trains, labels) in enumerate(train_iter):
-            outputs = model(trains)
+            outputs = model(*trains)
             model.zero_grad()
             loss = F.cross_entropy(outputs, labels)
             loss.backward()

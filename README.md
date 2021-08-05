@@ -13,5 +13,5 @@ bert-base-chinese模型可以通过两种方式下载
 - `https://huggingface.co/bert-base-chinese/tree/main` 下载
 
 ## THUCNews
-剔除的类别有：时尚（文本中过多"组图"）  
+剔除的类别有：时尚（标题文本中有过多"组图"）  
 保留的类别`['财经', '房产', '股票', '教育', '科技', '社会', '时政', '体育', '游戏', '娱乐']`
