@@ -1,7 +1,7 @@
 # coding: UTF-8
 import time
 import torch
-from train_eval import train
+from train_eval import train, test
 from bert_pytorch import BertConfig, BertForSequenceClassification, BertTokenizer
 from importlib import import_module
 import argparse
@@ -21,7 +21,7 @@ class Config(object):
         self.dev_path = '../data/' + dataset + '/dev.txt'
         self.test_path = '../data/' + dataset + '/test.txt'
         self.class_list = [x.strip() for x in open('../data/' + dataset + 'class.txt').readlines()]  # 类别名单
-        self.save_path = dataset + '/saved_dict/' + self.model_name + '.ckpt'        # 模型训练结果
+        self.save_path = '../trained_model/' + self.model_name + '.ckpt'        # 模型训练结果
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   # 设备
         self.require_improvement = 1000                                 # early stopping: 1000 batches
         self.num_classes = len(self.class_list)                         # 类别数: label_num
@@ -35,6 +35,7 @@ class Config(object):
 
 
 if __name__ == '__main__':
+    mode = 'train'
     dataset = 'THUCNewsTextClassification'  # 数据集
 
     model_name = args.model  # bert
@@ -56,6 +57,12 @@ if __name__ == '__main__':
     print("Time usage:", time_dif)
 
     # train
-    model = BertForSequenceClassification.from_pretrained(config.model_path, config.num_classes).to(config.device)
-    # next(bert.parameters()).is_cuda  -> check if model is on cuda
-    train(config, model, train_iter, dev_iter, test_iter)
+    if mode == 'train':
+        model = BertForSequenceClassification.from_pretrained(config.model_path, config.num_classes).to(config.device)
+        # next(bert.parameters()).is_cuda  -> check if model is on cuda
+        train(config, model, train_iter, dev_iter, test_iter)
+    else:
+        bert_config = BertConfig.from_json_file(config.model_path + '/config.json')
+        model = BertForSequenceClassification(bert_config, config.num_classes)
+        test(config, model, test_iter)
+
