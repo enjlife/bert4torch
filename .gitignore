@@ -1,6 +1,7 @@
 data/
 output/
 *.bin
+.DS_Store
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
