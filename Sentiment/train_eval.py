@@ -108,6 +108,7 @@ def evaluate(config, model, data_iter, test=False):
     predict_all = np.array([], dtype=int)
     labels_all = np.array([], dtype=int)
     with torch.no_grad():
+        # labels: label id  label_ids vocab_id of label
         for tests, (labels, label_ids) in data_iter:
             outputs = model(*tests)  # get mask_id
             loss = F.cross_entropy(outputs[:, 1], label_ids)

@@ -16,7 +16,7 @@ def build_dataset(config):
         mask_idx = 1
         pos_id = config.tokenizer.vocab['很']
         neg_id = config.tokenizer.vocab['不']
-        label_ids = [pos_id, neg_id]
+        label_ids = [neg_id, pos_id]
         contents = []
         with open(path, 'r', encoding='UTF-8') as f:
             for line in tqdm(f):
