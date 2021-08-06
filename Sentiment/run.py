@@ -1,4 +1,7 @@
 # coding: UTF-8
+import sys
+import os
+sys.path.append(os.path.abspath(os.getcwd()+'/..'))
 import time
 import torch
 from train_eval import train, test
@@ -10,10 +13,10 @@ from utils import build_dataset, build_iterator, get_time_dif
 
 parser = argparse.ArgumentParser(description='Chinese Sentiment')
 parser.add_argument('--model_path', type=str, default='../../pretrained_model/bert-base-chinese')
-parser.add_argument('--train_path', type=str, default='../../data/Sentiment/train.data')
-parser.add_argument('--dev_path', type=str, default='../../data/Sentiment/dev.data')
-parser.add_argument('--test_path', type=str, default='../../data/Sentiment/test.data')
-parser.add_argument('--class_path', type=str, default='../../data/Sentiment/class.data')
+parser.add_argument('--train_path', type=str, default='../../data/sentiment/train.data')
+parser.add_argument('--dev_path', type=str, default='../../data/sentiment/dev.data')
+parser.add_argument('--test_path', type=str, default='../../data/sentiment/test.data')
+parser.add_argument('--class_path', type=str, default='../../data/sentiment/class.data')
 parser.add_argument('--mode', type=str, default='test', help='train or test')
 parser.add_argument('--cuda', type=str, default='cuda:0')
 
@@ -34,7 +37,7 @@ class Config(object):
         self.require_improvement = 1000                                 # early stopping: 1000 batches
         self.num_classes = len(self.class_list)                         # 类别数: label_num
         self.num_epochs = 3                                             # epoch数
-        self.batch_size = 32                                            # mini-batch大小
+        self.batch_size = 2                                            # mini-batch大小
         self.max_len = 128                                              # 每句话处理成的长度(短填长切)
         self.learning_rate = 5e-5                                       # 学习率
         self.model_path = args.model_path                               # 预训练模型path
@@ -45,6 +48,7 @@ class Config(object):
 if __name__ == '__main__':
     # x = import_module('models.' + model_name)
     config = Config(args)
+    print(f'using device:{config.device}')
     start_time = time.time()
     print("Loading data...")
     train_data, dev_data, test_data = build_dataset(config)

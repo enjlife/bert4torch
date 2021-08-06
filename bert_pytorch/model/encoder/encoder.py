@@ -28,13 +28,13 @@ class BertEncoder(nn.Module):
         super(BertEncoder, self).__init__()
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layer=False):
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False):
         all_encoder_layers = []
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, attention_mask)
-            if output_all_encoded_layer:
+            if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)
-        if not output_all_encoded_layer:
+        if not output_all_encoded_layers:
             all_encoder_layers.append(hidden_states)
 
         return all_encoder_layers

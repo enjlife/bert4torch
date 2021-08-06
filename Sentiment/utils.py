@@ -28,7 +28,7 @@ def build_dataset(config):
                 content = prefix + content
                 token = config.tokenizer.tokenize(content)
                 token = [CLS] + token
-                token[mask_idx] = mask_id  # 'CLS MASK ...'
+                token[mask_idx] = MASK  # 'CLS MASK ...'
                 # seq_len = len(token)
                 mask = []
                 token_ids = config.tokenizer.convert_tokens_to_ids(token)
@@ -45,10 +45,10 @@ def build_dataset(config):
                 contents.append((token_ids, int(label), token_type_ids, mask, label_ids[int(label)]))
         return contents
     train, dev = None, None
-    test = load_dataset(config.test_path, config.pad_size)
+    test = load_dataset(config.test_path, config.max_len)
     if config.mode == 'train':
-        train = load_dataset(config.train_path, config.pad_size)
-        dev = load_dataset(config.dev_path, config.pad_size)
+        train = load_dataset(config.train_path, config.max_len)
+        dev = load_dataset(config.dev_path, config.max_len)
     return train, dev, test
 
 
@@ -68,7 +68,7 @@ class DatasetIterater(object):
         y = torch.LongTensor([data[1] for data in datas]).to(self.device)
         token_type_ids = torch.LongTensor([data[2] for data in datas]).to(self.device)
         mask = torch.LongTensor([data[3] for data in datas]).to(self.device)
-        label_ids = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        label_ids = torch.LongTensor([data[4] for data in datas]).to(self.device)
         return (token_ids, token_type_ids, mask), (y, label_ids)
 
     def __next__(self):

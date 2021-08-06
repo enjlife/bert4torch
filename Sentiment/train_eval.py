@@ -110,7 +110,7 @@ def evaluate(config, model, data_iter, test=False):
     with torch.no_grad():
         for tests, (labels, label_ids) in data_iter:
             outputs = model(*tests)  # get mask_id
-            loss = F.cross_entropy(outputs, label_ids)
+            loss = F.cross_entropy(outputs[:, 1], label_ids)
             loss_total += loss
             labels = labels.data.cpu().numpy()
             predic = torch.max(outputs.data[:, 1, [pos_id, neg_id]], 1)[1].cpu().numpy()

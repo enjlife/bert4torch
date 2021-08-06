@@ -1,6 +1,6 @@
 # bert4torch
 
-reference
+REFERENCE
 
 [BERT-pytorch](https://github.com/codertimo/BERT-pytorch)
 

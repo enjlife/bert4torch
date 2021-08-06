@@ -253,7 +253,7 @@ class BertModel(BertPreTrainedModel):
         self.pooler = Pooler(config)  # if config.with_pool or config.with_nsp else None
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layer=False):
+    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False):
         # encoder masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
         # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
@@ -268,8 +268,8 @@ class BertModel(BertPreTrainedModel):
             # TODO add additional mask on attention mask
             pass
         emb_output = self.embeddings(input_ids, token_type_ids)
-        encoder_layers = self.encoder(emb_output, attention_mask, output_all_encoded_layer=output_all_encoded_layer)
-        if not output_all_encoded_layer:
+        encoder_layers = self.encoder(emb_output, attention_mask, output_all_encoded_layers=output_all_encoded_layers)
+        if not output_all_encoded_layers:
             encoder_layers = encoder_layers[-1]
         pooled_output = self.pooler(encoder_layers)
 
