@@ -30,7 +30,7 @@ class Config(object):
         self.max_len = 32                                              # 每句话处理成的长度(短填长切)
         self.learning_rate = 5e-5                                       # 学习率
         self.model_path = '../pretrained_model/bert-base-chinese'        # 预训练模型path
-        self.tokenizer = BertTokenizer.from_pretrained(self.bert_path)  # dir is OK
+        self.tokenizer = BertTokenizer.from_pretrained(self.model_path)  # dir is OK
         # self.hidden_size = 768
 
 

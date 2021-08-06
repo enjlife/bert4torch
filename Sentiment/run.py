@@ -8,13 +8,14 @@ import argparse
 from utils import build_dataset, build_iterator, get_time_dif
 
 
-parser = argparse.ArgumentParser(description='Chinese Text Classification')
-parser.add_argument('--model_path', type=str, default='../pretrained_model/bert-base-chinese', help='pretrained model path')
-parser.add_argument('--train_path', type=str, default='D:\\sentiment_data\\sentiment\\train')
-parser.add_argument('--dev_path', type=str, default='D:\\sentiment_data\\sentiment\\dev')
-parser.add_argument('--test_path', type=str, default='D:\\sentiment_data\\sentiment\\test')
-parser.add_argument('--class_path', type=str, default='D:\\sentiment_data\\sentiment\\class.txt')
+parser = argparse.ArgumentParser(description='Chinese Sentiment')
+parser.add_argument('--model_path', type=str, default='../../pretrained_model/bert-base-chinese')
+parser.add_argument('--train_path', type=str, default='../../data/Sentiment/train.data')
+parser.add_argument('--dev_path', type=str, default='../../data/Sentiment/dev.data')
+parser.add_argument('--test_path', type=str, default='../../data/Sentiment/test.data')
+parser.add_argument('--class_path', type=str, default='../../data/Sentiment/class.data')
 parser.add_argument('--mode', type=str, default='test', help='train or test')
+parser.add_argument('--cuda', type=str, default='cuda:0')
 
 args = parser.parse_args()
 
@@ -29,33 +30,25 @@ class Config(object):
         self.test_path = args.test_path
         self.class_list = [x.strip() for x in open(args.class_path).readlines()]  # 类别名单
         self.save_path = '.trained_model' + '/' + self.model_name + '.ckpt'        # 模型训练结果
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   # 设备
+        self.device = torch.device(args.cuda if torch.cuda.is_available() else 'cpu')   # 设备
         self.require_improvement = 1000                                 # early stopping: 1000 batches
         self.num_classes = len(self.class_list)                         # 类别数: label_num
         self.num_epochs = 3                                             # epoch数
-        self.batch_size = 128                                           # mini-batch大小
+        self.batch_size = 32                                            # mini-batch大小
         self.max_len = 128                                              # 每句话处理成的长度(短填长切)
         self.learning_rate = 5e-5                                       # 学习率
-        self.model_path = '../pretrained_model/bert-base-chinese'        # 预训练模型path
-        self.tokenizer = BertTokenizer.from_pretrained(self.bert_path)  # dir is OK
+        self.model_path = args.model_path                               # 预训练模型path
+        self.tokenizer = BertTokenizer.from_pretrained(self.model_path)  # dir is OK
         # self.hidden_size = 768
 
 
 if __name__ == '__main__':
-    dataset = 'THUCNewsTextClassification'  # 数据集
-
-    model_name = args.model  # bert
     # x = import_module('models.' + model_name)
-    config = Config(dataset)
-
-    # np.random.seed(1)
-    # torch.manual_seed(1)
-    # torch.cuda.manual_seed_all(1)
-    # torch.backends.cudnn.deterministic = True  # 保证每次结果一样
-
+    config = Config(args)
     start_time = time.time()
     print("Loading data...")
     train_data, dev_data, test_data = build_dataset(config)
+    train_iter, dev_iter = None, None
     if args.mode == 'train':
         train_iter = build_iterator(train_data, config)
         dev_iter = build_iterator(dev_data, config)
