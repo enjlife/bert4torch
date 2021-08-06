@@ -12,9 +12,8 @@ PAD, CLS, MASK = '[PAD]', '[CLS]', '[MASK]'  # padding符号, bert中综合信�
 def build_dataset(config):
 
     def load_dataset(path, max_len=128):
-        prefix = '很满意。'
+        prefix = '很理想。'  # “_满意。“：69.64  ”_满意，“：73.66%
         mask_idx = 1
-        mask_id = config.tokenizer.vocab[MASK]
         pos_id = config.tokenizer.vocab['很']
         neg_id = config.tokenizer.vocab['不']
         label_ids = [pos_id, neg_id]
