@@ -160,6 +160,11 @@ class BertPreTrainedModel(nn.Module):
                 new_key = key.replace('gamma', 'weight')
             if 'beta' in key:
                 new_key = key.replace('beta', 'bias')
+            # add for uer bert pretrained_model
+            if key.startswith('embedding'):
+                new_key = 'bert.' + key.replace('embedding', 'embeddings')
+            elif key.startswith('encoder'):
+                new_key = 'bert.' + key.replace()
             if new_key:
                 old_keys.append(key)
                 new_keys.append(new_key)
@@ -186,6 +191,7 @@ class BertPreTrainedModel(nn.Module):
         start_prefix = ''
         if not hasattr(model, 'bert') and any(s.startswith('bert.') for s in state_dict.keys()):
             start_prefix = 'bert.'
+        # print(start_prefix)
         load(model, prefix=start_prefix)
         if len(missing_keys) > 0:
             logger.warning("Weights of {} not initialized from pretrained model: {}".format(

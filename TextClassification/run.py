@@ -1,4 +1,7 @@
 # coding: UTF-8
+import os
+import sys
+sys.path.append(os.path.abspath(os.getcwd()+'/..'))
 import time
 import torch
 from train_eval import train, test
