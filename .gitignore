@@ -1,8 +1,8 @@
-data/
 output/
 *.bin
 .DS_Store
 .idea/
+*.data
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
