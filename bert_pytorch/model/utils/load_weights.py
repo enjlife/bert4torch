@@ -57,7 +57,7 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
 }
 BERT_CONFIG_NAME = 'bert_config.json'
-TF_WEIGHTS_NAME = 'model.ckpt'
+TF_WEIGHTS_NAME = 'bert_model.ckpt'
 
 
 def cached_path(url_or_filename, cache_dir=None):
@@ -108,7 +108,7 @@ def load_tf_weights_in_bert(model, tf_checkpoint_path):
 
     names, arrays = [],  []
     for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
+        # logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)

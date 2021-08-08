@@ -8,10 +8,16 @@ REFERENCE
 
 [Bert-Chinese-Text-Classification-Pytorch](https://github.com/649453932/Bert-Chinese-Text-Classification-Pytorch)
 
-bert-base-chinese模型可以通过两种方式下载
+## 模型下载
+### bert-base-chinese
+模型可以通过两种方式下载
 - `bert.from_pretrained`自动下载，参数设置如下：  
 `bert = BertModel.from_pretrained('bert-base-chinese', **{'cache_dir': 'path_to_save'})`
 - [huggingface](https://huggingface.co/bert-base-chinese/tree/main) 下载
+
+### 哈工大整词bert chinese-bert-wwm
+
+[chinese-bert-wwm](https://huggingface.co/hfl/chinese-bert-wwm-ext/tree/main)
 
 ## THUCNews分类
 原数据集共有14个类别，有些类被剔除例如时尚新闻，标题文本中有过多"组图"  
