@@ -3,6 +3,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.getcwd()+'/..'))
 import time
+import numpy as np
 import torch
 from train_eval import train, test
 from bert_pytorch import BertConfig, BertForMaskedLM, BertTokenizer
@@ -11,9 +12,9 @@ import argparse
 from utils import build_dataset, build_iterator, get_time_dif
 
 
-parser = argparse.ArgumentParser(description='Chinese Sentiment')
+parser = argparse.ArgumentParser(description='Chinese sentiment')
 parser.add_argument('--prefix', type=str, default='../')
-parser.add_argument('--model_path', type=str, default='pretrained_model/chinese_L-12_H-768_A-12')
+parser.add_argument('--model_path', type=str, default='pretrained_model/roberta-base-chinese')
 parser.add_argument('--save_path', type=str, default='trained_model/model.ckpt')
 parser.add_argument('--train_path', type=str, default='data/sentiment/train.data')
 parser.add_argument('--dev_path', type=str, default='data/sentiment/dev.data')
@@ -49,21 +50,28 @@ class Config(object):
 
 if __name__ == '__main__':
     # x = import_module('models.' + model_name)
+    np.random.seed(1)
+    torch.manual_seed(1)
+    torch.cuda.manual_seed_all(1)
+    torch.backends.cudnn.deterministic = True  # 保证每次结果一样
     config = Config(args)
     print(f'using device:{config.device}')
     start_time = time.time()
     print("Loading data...")
-    train_data, dev_data, test_data = build_dataset(config)
-    train_iter, dev_iter = None, None
-    if args.mode == 'train':
-        train_iter = build_iterator(train_data, config)
-        dev_iter = build_iterator(dev_data, config)
-    test_iter = build_iterator(test_data, config)
-    time_dif = get_time_dif(start_time)
-    print("Time usage:", time_dif)
-    model = BertForMaskedLM.from_pretrained(config.model_path, **{'from_tf': True}).to(config.device)
-    # train
-    if args.mode == 'train':
-        train(config, model, train_iter, dev_iter, test_iter)
-    else:
-        test(config, model, test_iter)
+    model = BertForMaskedLM.from_pretrained(config.model_path).to(config.device)
+    for pre in ['很理想。', '很理想，']:
+        print('-'*10 + pre + '-'*10)
+        config.test_prefix = pre
+        train_data, dev_data, test_data = build_dataset(config)
+        train_iter, dev_iter = None, None
+        if args.mode == 'train':
+            train_iter = build_iterator(train_data, config)
+            dev_iter = build_iterator(dev_data, config)
+        test_iter = build_iterator(test_data, config)
+        time_dif = get_time_dif(start_time)
+        print("Time usage:", time_dif)
+        # train
+        if args.mode == 'train':
+            train(config, model, train_iter, dev_iter, test_iter)
+        else:
+            test(config, model, test_iter)

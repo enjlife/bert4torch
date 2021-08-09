@@ -11,8 +11,7 @@ PAD, CLS, MASK = '[PAD]', '[CLS]', '[MASK]'  # padding符号, bert中综合信�
 
 def build_dataset(config):
 
-    def load_dataset(path, max_len=128):
-        prefix = '很理想。'  # “_满意。“：69.64  ”_满意，“：73.66%
+    def load_dataset(path, prefix='很理想。', max_len=128):
         mask_idx = 1
         pos_id = config.tokenizer.vocab['很']
         neg_id = config.tokenizer.vocab['不']
@@ -44,10 +43,10 @@ def build_dataset(config):
                 contents.append((token_ids, int(label), token_type_ids, mask, label_ids[int(label)]))
         return contents
     train, dev = None, None
-    test = load_dataset(config.test_path, config.max_len)
+    test = load_dataset(config.test_path, config.test_prefix, config.max_len)
     if config.mode == 'train':
-        train = load_dataset(config.train_path, config.max_len)
-        dev = load_dataset(config.dev_path, config.max_len)
+        train = load_dataset(config.train_path, config.test_prefix, config.max_len)
+        dev = load_dataset(config.dev_path, config.test_prefix, config.max_len)
     return train, dev, test
 
 
