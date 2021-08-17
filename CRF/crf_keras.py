@@ -32,7 +32,7 @@ class CRF(Layer):
         inputs, mask = inputs[:, :-1], inputs[:, -1:]  # (batch_size, 4) (batch_size, 1)
         states = K.expand_dims(states[0], 2)  # (batch_size, output_dim, 1)
         trans = K.expand_dims(self.trans, 0)  # (1, output_dim, output_dim)
-        # 指数乘法，先相加
+        # 指数乘法，先相加 (batch_size, output_dim, 1) + (1, output_dim, output_dim) -> (batch_size, output_dim, output_dim)
         outputs = K.logsumexp(states + trans, 1)  # (batch_size, output_dim)
         outputs = outputs + inputs  # 指数加法，指数在下一个cell
         outputs = mask * outputs + (1 - mask) * states[:, :, 0]
