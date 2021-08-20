@@ -28,13 +28,16 @@ class CRF(Layer):
         """递归计算归一化因子
         要点：1、递归计算；2、用logsumexp避免溢出。
         技巧：通过expand_dims来对齐张量。
+        这块比较核心，更详细的推导可以看 `https://blog.csdn.net/weixin_40548136/article/details/119620027`
         """
         inputs, mask = inputs[:, :-1], inputs[:, -1:]  # (batch_size, 4) (batch_size, 1)
         states = K.expand_dims(states[0], 2)  # (batch_size, output_dim, 1)
         trans = K.expand_dims(self.trans, 0)  # (1, output_dim, output_dim)
-        # 指数乘法，先相加 (batch_size, output_dim, 1) + (1, output_dim, output_dim) -> (batch_size, output_dim, output_dim)
+        # 指数乘法，e^(Z_t + h_{t+1}) (batch_size, output_dim, 1) + (1, output_dim, output_dim) -> (batch_size, output_dim, output_dim)
+        # 针对当前k个终点累加, 所以累加的维度为1 (batch_size, output_dim, output_dim) -> ((batch_size, output_dim)
         outputs = K.logsumexp(states + trans, 1)  # (batch_size, output_dim)
-        outputs = outputs + inputs  # 指数加法，指数在下一个cell
+        outputs = outputs + inputs
+        # mask=1 正常输出；为0，输出上一个状态
         outputs = mask * outputs + (1 - mask) * states[:, :, 0]
         return outputs, [outputs]
 
@@ -67,7 +70,7 @@ class CRF(Layer):
         y_pred = K.concatenate([y_pred, mask])
         log_norm, _, _ = K.rnn(self.log_norm_step, y_pred[:, 1:], init_states)  # 计算Z向量（对数）
         log_norm = K.logsumexp(log_norm, 1, keepdims=True)  # 计算Z（对数）
-        return log_norm - path_score  # 即log(分子/分母)
+        return log_norm - path_score  # 即-log(分子/分母)
 
     def accuracy(self, y_true, y_pred):  # 训练过程中显示逐帧准确率的函数，排除了mask的影响
         mask = 1 - y_true[:, :, -1] if self.ignore_last_label else None
