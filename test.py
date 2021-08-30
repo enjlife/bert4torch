@@ -9,7 +9,7 @@ from bert_pytorch import BertModel
 #     pass
 #
 # models.bert
-tokenizer = BertTokenizer.from_pretrained()
+tokenizer = BertTokenizer.from_pretrained('')
 
 
 # bert = BertModel.from_pretrained('bert-base-chinese', **{'cache_dir': r'pretrained_model/bert-base-chinese'})
