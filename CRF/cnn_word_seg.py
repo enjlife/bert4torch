@@ -67,6 +67,7 @@ def train_generator():  # 定义数据生成器
 embedding_size = 128
 sequence = Input(shape=(None,), dtype='int32')  # 建立输入层，输入长度设为None
 embedding = Embedding(len(chars)+1, embedding_size,)(sequence)  # 去掉了mask_zero=True
+# [batch_size, seq_len, embedding_size] -> [batch_size, seq_len, hidden_size]
 cnn = Conv1D(128, 3, activation='relu', padding='same')(embedding)
 cnn = Conv1D(128, 3, activation='relu', padding='same')(cnn)
 cnn = Conv1D(128, 3, activation='relu', padding='same')(cnn)  # 层叠了3层CNN
@@ -84,7 +85,7 @@ model.compile(loss=crf.loss,  # 用crf自带的loss
              )
 
 
-def max_in_dict(d): # 定义一个求字典中最大值的函数
+def max_in_dict(d):  # 定义一个求字典中最大值的函数
     key,value = d.items()[0]
     for i,j in d.items()[1:]:
         if j > value:
@@ -113,10 +114,10 @@ def cut(s, trans): # 分词函数，也跟前面的HMM基本一致
     # 所以这里简单将空格的id跟句号的id等同起来
     sent_ids = np.array([[char2id.get(c, 0) if c != ' ' else char2id[u'。']
                           for c in s]])
-    probas = model.predict(sent_ids)[0] # 模型预测
-    nodes = [dict(zip('sbme', i)) for i in probas[:, :4]] # 只取前4个
-    nodes[0] = {i:j for i,j in nodes[0].items() if i in 'bs'} # 首字标签只能是b或s
-    nodes[-1] = {i:j for i,j in nodes[-1].items() if i in 'es'} # 末字标签只能是e或s
+    probas = model.predict(sent_ids)[0]  # 模型预测
+    nodes = [dict(zip('sbme', i)) for i in probas[:, :4]]  # 只取前4个
+    nodes[0] = {i:j for i,j in nodes[0].items() if i in 'bs'}  # 首字标签保留 b或s
+    nodes[-1] = {i:j for i,j in nodes[-1].items() if i in 'es'}  # 末字标签保留 e或s
     tags = viterbi(nodes, trans)[0]
     result = [s[0]]
     for i,j in zip(s[1:], tags[1:]):
@@ -131,7 +132,7 @@ class Evaluate(Callback):
     def __init__(self):
         self.highest = 0.
     def on_epoch_end(self, epoch, logs=None):
-        _ = model.get_weights()[-1][:4,:4] # 从训练模型中取出最新得到的转移矩阵
+        _ = model.get_weights()[-1][:4, :4]  # 从训练模型中取出最新得到的转移矩阵
         trans = {}
         for i in 'sbme':
             for j in 'sbme':
@@ -149,8 +150,8 @@ class Evaluate(Callback):
         print('val acc: %s, highest: %s'%(acc, self.highest))
 
 
-evaluator = Evaluate() # 建立Callback类
+evaluator = Evaluate()  # 建立Callback类
 model.fit_generator(train_generator(),
                     steps_per_epoch=500,
                     epochs=10,
-                    callbacks=[evaluator]) # 训练并将evaluator加入到训练过程
+                    callbacks=[evaluator])  # 训练并将evaluator加入到训练过程

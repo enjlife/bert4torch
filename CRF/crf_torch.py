@@ -135,7 +135,7 @@ class CRF(nn.Module):
             mask = mask.transpose(0, 1)
 
         return self._viterbi_decode(emissions, mask)
-
+    # 参数检查
     def _validate(
             self,
             emissions: torch.Tensor,
