@@ -233,7 +233,7 @@ class CRF(nn.Module):
             # for each sample, entry at row i and column j stores the sum of scores of all
             # possible tag sequences so far that end with transitioning from tag i to tag j
             # and emitting
-            # shape: (batch_size, num_tags, num_tags)
+            # shape: (batch_size, num_tags, num_tags) + ()
             next_score = broadcast_score + self.transitions + broadcast_emissions
 
             # Sum over all possible current tags, but we're in score space, so a sum
@@ -293,8 +293,8 @@ class CRF(nn.Module):
             # shape: (batch_size, num_tags, num_tags)
             next_score = broadcast_score + self.transitions + broadcast_emission
 
-            # Find the maximum score over all possible current tag
-            # shape: (batch_size, num_tags)
+            # Find the maximum score over all possible current tag 当前tag的最大score
+            # shape: (batch_size, num_tags, num_tags) -> (batch_size, num_tags)
             next_score, indices = next_score.max(dim=1)
 
             # Set score to the next score if this timestep is valid (mask == 1)
@@ -309,18 +309,21 @@ class CRF(nn.Module):
 
         # Now, compute the best path for each sample
 
-        # shape: (batch_size,)
+        # shape: (batch_size,) 获取batch中每个sequence的结尾索引
         seq_ends = mask.long().sum(dim=0) - 1
         best_tags_list = []
 
         for idx in range(batch_size):
             # Find the tag which maximizes the score at the last timestep; this is our best tag
             # for the last timestep
+            # 取最后一个timestep的值，获得最大路径最后一个位置的标签
             _, best_last_tag = score[idx].max(dim=0)
             best_tags = [best_last_tag.item()]
 
             # We trace back where the best last tag comes from, append that to our best tag
             # sequence, and trace it back again, and so on
+            # history记录前一步到当前步不同标签的最大索引
+            # 假设共有m个timestep(seq_ends[idx]=m-1)，则history长度m-1,最后一个记录的索引为m-2,所以这里翻转的history[:m-1]
             for hist in reversed(history[:seq_ends[idx]]):
                 best_last_tag = hist[idx][best_tags[-1]]
                 best_tags.append(best_last_tag.item())
