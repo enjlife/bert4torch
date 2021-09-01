@@ -180,9 +180,9 @@ class CRF(nn.Module):
         mask = mask.type_as(emissions)
 
         # Start transition score and first emission
-        # shape: (batch_size,)
+        # shape: (batch_size,) 起始分=start_transitions + emission[0,:,tag]
         score = self.start_transitions[tags[0]]
-        score += emissions[0, torch.arange(batch_size), tags[0]]
+        score += emissions[0, torch.arange(batch_size), tags[0]]  # batch中每个样本取一个tag
 
         for i in range(1, seq_length):
             # Transition score to next tag, only added if next timestep is valid (mask == 1)
@@ -253,7 +253,7 @@ class CRF(nn.Module):
         # Sum (log-sum-exp) over all possible tags
         # shape: (batch_size,)
         return torch.logsumexp(score, dim=1)
-
+    # viterbi解码获取最优路径
     def _viterbi_decode(self, emissions: torch.FloatTensor,
                         mask: torch.ByteTensor) -> List[List[int]]:
         # emissions: (seq_length, batch_size, num_tags)
