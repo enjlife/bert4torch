@@ -167,8 +167,8 @@ class CRF(nn.Module):
     def _compute_score(
             self, emissions: torch.Tensor, tags: torch.LongTensor,
             mask: torch.ByteTensor) -> torch.Tensor:
-        # emissions: (seq_length, batch_size, num_tags)
-        # tags: (seq_length, batch_size)
+        # emissions: (seq_length, batch_size, num_tags) 发射概率
+        # tags: (seq_length, batch_size) 正确标签
         # mask: (seq_length, batch_size)
         assert emissions.dim() == 3 and tags.dim() == 2
         assert emissions.shape[:2] == tags.shape
@@ -233,7 +233,7 @@ class CRF(nn.Module):
             # for each sample, entry at row i and column j stores the sum of scores of all
             # possible tag sequences so far that end with transitioning from tag i to tag j
             # and emitting
-            # shape: (batch_size, num_tags, num_tags) + ()
+            # shape: (batch_size, num_tags, 1) + (num_tags, num_tags) + (batch_size, 1, num_tags)
             next_score = broadcast_score + self.transitions + broadcast_emissions
 
             # Sum over all possible current tags, but we're in score space, so a sum
@@ -253,6 +253,7 @@ class CRF(nn.Module):
         # Sum (log-sum-exp) over all possible tags
         # shape: (batch_size,)
         return torch.logsumexp(score, dim=1)
+
     # viterbi解码获取最优路径
     def _viterbi_decode(self, emissions: torch.FloatTensor,
                         mask: torch.ByteTensor) -> List[List[int]]:

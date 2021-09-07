@@ -86,11 +86,11 @@ model.compile(loss=crf.loss,  # 用crf自带的loss
 
 
 def max_in_dict(d):  # 定义一个求字典中最大值的函数
-    key,value = d.items()[0]
-    for i,j in d.items()[1:]:
+    key, value = d.items()[0]
+    for i, j in d.items()[1:]:
         if j > value:
-            key,value = i,j
-    return key,value
+            key, value = i, j
+    return key, value
 
 
 def viterbi(nodes, trans): # viterbi算法，跟前面的HMM一致
@@ -127,10 +127,12 @@ def cut(s, trans): # 分词函数，也跟前面的HMM基本一致
             result[-1] += i
     return result
 
+
 # 自定义Callback类
 class Evaluate(Callback):
     def __init__(self):
         self.highest = 0.
+
     def on_epoch_end(self, epoch, logs=None):
         _ = model.get_weights()[-1][:4, :4]  # 从训练模型中取出最新得到的转移矩阵
         trans = {}
@@ -147,7 +149,7 @@ class Evaluate(Callback):
         acc = right/total
         if acc > self.highest:
             self.highest = acc
-        print('val acc: %s, highest: %s'%(acc, self.highest))
+        print('val acc: %s, highest: %s' % (acc, self.highest))
 
 
 evaluator = Evaluate()  # 建立Callback类
