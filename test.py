@@ -4,6 +4,9 @@ from bert4keras.models import build_transformer_model
 from transformers import BertModel, BertTokenizer, AutoTokenizer
 from bert4keras import models
 from bert_pytorch import BertModel
+import pandas as pd
+
+
 #
 # class BERTVocabTestCase(unittest.TestCase):
 #     pass
