@@ -81,8 +81,7 @@ model.summary()
 
 model.compile(loss=crf.loss,  # 用crf自带的loss
               optimizer='adam',
-              metrics=[crf.accuracy]  # 用crf自带的accuracy
-             )
+              metrics=[crf.accuracy])  # 用crf自带的accuracy
 
 
 def max_in_dict(d):  # 定义一个求字典中最大值的函数
