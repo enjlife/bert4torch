@@ -34,6 +34,7 @@ def train(config, model, train_iter, dev_iter, test_iter):
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     # set lambda of weight_decay(l2 re): 0.01
     # batch_norm or layer_norm or bias : lambda=0
+    # 关于l2正则(权值衰减) https://blog.csdn.net/weixin_40548136/article/details/119192381
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
