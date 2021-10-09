@@ -10,6 +10,8 @@ import torch.nn.functional as F
 from datetime import timedelta
 
 # TODO 数据准备 to_id()
+# TODO 数据准备 打乱数据
+# TODO batch的准召
 
 
 def get_time_dif(start_time):
@@ -74,7 +76,7 @@ class DatasetIterater(object):
         x = torch.LongTensor([data[0] for data in datas]).to(self.device)
         y = torch.LongTensor([data[1] for data in datas]).to(self.device)
         mask = torch.LongTensor([data[2] for data in datas]).to(self.device)
-        return (token_ids, token_type_ids, mask), y
+        return x, y, mask
 
     def __next__(self):
         if self.residue and self.index == self.n_batches:
@@ -143,46 +145,76 @@ def build_dataset(path, max_len=32):
     return trains, valids, id2char, char2id
 
 
-def train(model, train_iter, dev_iter, config):
-    start_time = time.time()
-    model.train()
-    optimizer = Adam(model.parameters(), lr=config.lr)
-    total_batch = 0                 # 记录进行到多少batch
-    dev_best_loss = float('inf')    # dev 最小loss
-    last_improve = 0                # 记录上次验证集loss下降的batch数
-    flag = False                    # 记录是否很久没有效果提升
-    model.train()
-    for epoch in range(config.num_epochs):
-        print('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-        for i, (x, y, mask) in enumerate(train_iter):
-            model.zero_grad()
-            loss = model(x, y, mask)
-            loss.backward()
-            optimizer.step()
-            if total_batch % 100 == 0:
-                predic = model(x, y, mask, test=True)
-                true = y.data.cpu()
-                train_acc = metrics.accuracy_score(true, predic)
-                dev_acc, dev_loss = evaluate(config, model, dev_iter)
-                if dev_loss < dev_best_loss:
-                    dev_best_loss = dev_loss
-                    torch.save(model.state_dict(), config.save_path)
-                    improve = '*'
-                    last_improve = total_batch
-                else:
-                    improve = ''
-                time_dif = get_time_dif(start_time)
-                msg = 'Iter: {0:>6},  Train Loss: {1:>5.2},  Train Acc: {2:>6.2%},  Val Loss: {3:>5.2},  Val Acc: {4:>6.2%},  Time: {5} {6}'
-                print(msg.format(total_batch, loss.item(), train_acc, dev_loss, dev_acc, time_dif, improve))
-                model.train()
-            total_batch += 1
-            if total_batch - last_improve > config.require_improvement:
-                # 验证集loss超过1000batch没下降，结束训练
-                print(f"No optimization for {config.require_improvement} batches, auto-stopping...")
-                flag = True
-                break
-        if flag:
-            break
+class Train:
+    def __init__(self, model, train_iter, dev_iter, config):
+        self.model = model
+        self.train_iter = train_iter
+        self.dev_iter = dev_iter
+        self.config = config
+
+    def train(self):
+        start_time = time.time()
+        self.model.train()
+        optimizer = Adam(self.model.parameters(), lr=self.config.lr)
+        total_batch = 0  # 记录进行到多少batch
+        dev_best_loss = float('inf')  # dev 最小loss
+        for epoch in range(self.config.num_epochs):
+            print('Epoch [{}/{}]'.format(epoch + 1, self.config.num_epochs))
+            for i, (x, y, mask) in enumerate(self.train_iter):
+                self.model.zero_grad()
+                loss = self.model(x, y, mask)
+                loss.backward()
+                optimizer.step()
+                if total_batch % 100 == 0:
+                    y_pre = self.model(x, y, mask, test=True)
+                    y_true = y.cpu().numpy().tolist()
+                    mask = mask.cpu().numpy().sum(axis=1).tolist()
+                    train_acc = self.cal_acc(y_pre, y_true, mask)
+                    dev_loss, dev_acc, dev_rec = self.evaluate()
+                    if dev_loss < dev_best_loss:
+                        dev_best_loss = dev_loss
+                        torch.save(model.state_dict(), config.save_path)
+                        improve = '*'
+                    else:
+                        improve = ''
+                    time_dif = get_time_dif(start_time)
+                    msg = 'Iter: {0:>6},  Train Loss: {1:>5.2},  Train Acc: {2:>6.2%},  Val Loss: {3:>5.2},  Val Acc: {4:>6.2%},  Time: {5} {6}'
+                    print(msg.format(total_batch, loss.item(), train_acc, dev_loss, dev_acc, time_dif, improve))
+                    model.train()
+                total_batch += 1
+
+
+    def evaluate(self):
+        self.model.eval()
+        loss_total = 0.0
+        acc_total = 0.0
+        rec_total = 0.0
+        n = 0
+        with torch.no_grad():
+            for x, y, mask in self.dev_iter:
+                loss = self.model(x, y, mask)
+                loss_total += loss.item()
+                y_pre = self.model(x, y, mask, test=True)
+                y_true = y.cpu().numpy().tolist()
+                mask = mask.cpu().numpy().sum(axis=1).tolist()
+                acc, rec = self.cal_acc(y_pre, y_true, mask)
+                acc_total += acc
+                rec_total += rec
+                n += 1
+        return loss_total/n, acc_total/n, rec_total/n
+
+    def cal_acc(self, y_pre, y_true, mask):
+        n = len(y_pre)
+        acc, rec = 0.0, 0.0
+        for i in range(n):
+            length = mask[i]
+            tp = y_pre[i][length]
+            tt = y_true[i][length]
+            tt = set([i*2 + x for i, x in enumerate(tt) if x == 0 or x == 1])
+            tp = set([i*2 + x for i, x in enumerate(tp) if x == 0 or x == 1])
+            acc += len(tt & tp) / len(tp)
+            rec += len(tt & tp) / len(tt)
+        return acc/n, rec/n
 
 
 class Config:
@@ -196,6 +228,7 @@ class Config:
         self.path = '../icwb2-data/training/msr_training.utf8'
         self.num_labels = 4
         self.vocab_size = 0
+        self.save_path =
 
 
 if __name__ == '__main__':
