@@ -12,6 +12,7 @@ from datetime import timedelta
 # TODO 数据准备 to_id()
 # TODO 数据准备 打乱数据
 # TODO batch的准召
+# TODO build Train
 
 
 def get_time_dif(start_time):
@@ -228,7 +229,7 @@ class Config:
         self.path = '../icwb2-data/training/msr_training.utf8'
         self.num_labels = 4
         self.vocab_size = 0
-        self.save_path =
+        self.save_path = 'model.ckpt'
 
 
 if __name__ == '__main__':
@@ -239,4 +240,5 @@ if __name__ == '__main__':
     valid_iter = DatasetIterater(valid_data, config.batch_size, config.device)
 
     model = CnnWordSeg(config)
-    train(model, train_iter, valid_iter, config)
+    train = Train(model, train_iter, valid_iter, config)
+    train.train()
