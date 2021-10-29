@@ -1,7 +1,7 @@
 import os
 import torch.nn
 from torch import nn
-from .crf_torch import CRF
+from crf_torch import CRF
 import re
 import random
 import time
@@ -49,10 +49,11 @@ class CnnWordSeg(nn.Module):
 
     def forward(self, x, y, mask, test=False):
         hidden_state = self.embedding(x)  # (batch,seq_len,hidden_size)
-
+        hidden_state = hidden_state.permute(0, 2, 1)  # 一维卷积是在length维度
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.conv2(hidden_state)
         hidden_state = self.conv3(hidden_state)
+        hidden_state = hidden_state.permute(0, 2, 1)
 
         hidden_state = self.dense(hidden_state)
         if not test:
@@ -74,9 +75,10 @@ class DatasetIterater(object):
         self.device = device
 
     def _to_tensor(self, datas):
-        x = torch.LongTensor([data[0] for data in datas]).to(self.device)
-        y = torch.LongTensor([data[1] for data in datas]).to(self.device)
-        mask = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        max_len = max([len(data[0]) for data in datas])
+        x = torch.LongTensor([data[0] + [0]*(max_len-len(data[0])) for data in datas]).to(self.device)
+        y = torch.LongTensor([data[1] + [0]*(max_len-len(data[0])) for data in datas]).to(self.device)
+        mask = torch.ByteTensor([data[2] + [0]*(max_len-len(data[0])) for data in datas]).to(self.device)
         return x, y, mask
 
     def __next__(self):
@@ -106,7 +108,7 @@ class DatasetIterater(object):
 
 
 def build_dataset(path, max_len=32):
-    sents = open(path, 'r').read().strip().split('\r\n')
+    sents = open(path, 'r', encoding='utf8').read().strip().split('\n')
     sents = [re.split(' +', s) for s in sents]  # 词之间以两个空格隔开
     sents = [[w for w in s if w] for s in sents]  # 去掉空字符串
     random.shuffle(sents)  # 打乱语料，以便后面划分验证集
@@ -120,7 +122,7 @@ def build_dataset(path, max_len=32):
                 else:
                     chars[c] = 1
         chars = {i: j for i, j in chars.items() if j >= min_count}
-        id2char = {i: j for i, j in enumerate(chars.keys())}
+        id2char = {i+1: j for i, j in enumerate(chars.keys())}
         char2id = {j: i for i, j in id2char.items()}
         return id2char, char2id
     id2char, char2id = build_vocab(sents)
@@ -139,7 +141,7 @@ def build_dataset(path, max_len=32):
                     y.extend([1, 3])
                 else:
                     y.extend([1] + [2] * (len(w) - 2) + [3])
-            datasets.append((x, y))
+            datasets.append((x, y, [1]*len(x)))  # x,y,mask
         return datasets
     data = to_id()
     trains, valids = data[:-5000], data[-5000:]
@@ -184,7 +186,6 @@ class Train:
                     model.train()
                 total_batch += 1
 
-
     def evaluate(self):
         self.model.eval()
         loss_total = 0.0
@@ -209,12 +210,12 @@ class Train:
         acc, rec = 0.0, 0.0
         for i in range(n):
             length = mask[i]
-            tp = y_pre[i][length]
-            tt = y_true[i][length]
+            tp = y_pre[i][:length]
+            tt = y_true[i][:length]
             tt = set([i*2 + x for i, x in enumerate(tt) if x == 0 or x == 1])
             tp = set([i*2 + x for i, x in enumerate(tp) if x == 0 or x == 1])
-            acc += len(tt & tp) / len(tp)
-            rec += len(tt & tp) / len(tt)
+            acc += len(tt & tp) / (len(tp)+1)
+            rec += len(tt & tp) / (len(tt)+1)
         return acc/n, rec/n
 
 
@@ -226,7 +227,7 @@ class Config:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_labels = 4
         self.hidden_size = 128
-        self.path = '../icwb2-data/training/msr_training.utf8'
+        self.path = r'D:\data\icwb2-data\training\msr_training.utf8'
         self.num_labels = 4
         self.vocab_size = 0
         self.save_path = 'model.ckpt'
@@ -235,7 +236,7 @@ class Config:
 if __name__ == '__main__':
     config = Config()
     train_data, valid_data, id2char, char2id = build_dataset(config.path)
-    config.vocab_size = len(id2char)
+    config.vocab_size = len(id2char) + 1
     train_iter = DatasetIterater(train_data, config.batch_size, config.device)
     valid_iter = DatasetIterater(valid_data, config.batch_size, config.device)
 
