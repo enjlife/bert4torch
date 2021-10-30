@@ -101,7 +101,8 @@ class CRF(nn.Module):
         # shape: (batch_size,)
         denominator = self._compute_normalizer(emissions, mask)
         # shape: (batch_size,)
-        llh = numerator - denominator
+        # llh = numerator - denominator
+        llh = denominator - numerator  # 损失为正
 
         if reduction == 'none':
             return llh

@@ -141,7 +141,8 @@ def build_dataset(path, max_len=32):
                     y.extend([1, 3])
                 else:
                     y.extend([1] + [2] * (len(w) - 2) + [3])
-            datasets.append((x, y, [1]*len(x)))  # x,y,mask
+            if x:
+                datasets.append((x, y, [1]*len(x)))  # x,y,mask
         return datasets
     data = to_id()
     trains, valids = data[:-5000], data[-5000:]
@@ -172,7 +173,7 @@ class Train:
                     y_pre = self.model(x, y, mask, test=True)
                     y_true = y.cpu().numpy().tolist()
                     mask = mask.cpu().numpy().sum(axis=1).tolist()
-                    train_acc = self.cal_acc(y_pre, y_true, mask)
+                    train_acc, rec = self.cal_acc(y_pre, y_true, mask)
                     dev_loss, dev_acc, dev_rec = self.evaluate()
                     if dev_loss < dev_best_loss:
                         dev_best_loss = dev_loss
@@ -181,8 +182,8 @@ class Train:
                     else:
                         improve = ''
                     time_dif = get_time_dif(start_time)
-                    msg = 'Iter: {0:>6},  Train Loss: {1:>5.2},  Train Acc: {2:>6.2%},  Val Loss: {3:>5.2},  Val Acc: {4:>6.2%},  Time: {5} {6}'
-                    print(msg.format(total_batch, loss.item(), train_acc, dev_loss, dev_acc, time_dif, improve))
+                    msg = 'Iter: {0:>6},  Train Loss: {1:>5.2},  Train Acc: {2:>6.2%},  Rec: {3:>6.2%},  Val Loss: {4:>5.2},  Val Acc: {5:>6.2%},  Time: {6} {7}'
+                    print(msg.format(total_batch, loss.item(), train_acc, rec, dev_loss, dev_acc, time_dif, improve))
                     model.train()
                 total_batch += 1
 
@@ -227,7 +228,7 @@ class Config:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_labels = 4
         self.hidden_size = 128
-        self.path = r'D:\data\icwb2-data\training\msr_training.utf8'
+        self.path = '../data/icwb2/msr_training.utf8'
         self.num_labels = 4
         self.vocab_size = 0
         self.save_path = 'model.ckpt'
@@ -240,6 +241,6 @@ if __name__ == '__main__':
     train_iter = DatasetIterater(train_data, config.batch_size, config.device)
     valid_iter = DatasetIterater(valid_data, config.batch_size, config.device)
 
-    model = CnnWordSeg(config)
+    model = CnnWordSeg(config).cuda(0)
     train = Train(model, train_iter, valid_iter, config)
     train.train()
