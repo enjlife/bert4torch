@@ -39,7 +39,7 @@ class Config(object):
 
 if __name__ == '__main__':
     mode = 'train'
-    dataset = 'THUCNewsTextClassification'  # 数据集
+    dataset = 'THUCNewsText'  # 数据集
 
     model_name = args.model  # bert
     # x = import_module('models.' + model_name)

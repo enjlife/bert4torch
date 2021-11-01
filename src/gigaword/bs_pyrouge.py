@@ -635,7 +635,7 @@ class Rouge155(object):
 
 if __name__ == "__main__":
     import argparse
-    from TextClassification.utils import rouge_path_parser
+    from THUCNews.utils import rouge_path_parser
 
     parser = argparse.ArgumentParser(parents=[rouge_path_parser])
     args = parser.parse_args()
