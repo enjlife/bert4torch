@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from optimizer_schedule import BertAdam
+from .optimizers import Adam
 from torch.utils.data import DataLoader
 import tqdm
+import random
+import numpy as np
 
 
 class Trainer(object):
@@ -119,7 +121,7 @@ class Trainer(object):
         print("EP%d_%s, avg_loss=" % (epoch, str_code), avg_loss / len(data_iter), "total_acc=",
               total_correct * 100.0 / total_element)
 
-    def save(self, epoch, file_path="output/bert_trained.model"):
+    def save(self, epoch, file_path="trained.model"):
         """
         Saving the current BERT model on file_path
 
@@ -128,7 +130,26 @@ class Trainer(object):
         :return: final_output_path
         """
         output_path = file_path + ".ep%d" % epoch
-        torch.save(self.bert.cpu(), output_path)
-        self.bert.to(self.device)
+        torch.save(self.model.state_dict(), output_path)
+        # self.model.to(self.device)
         print("EP:%d Model Saved on:" % epoch, output_path)
         return output_path
+
+
+
+def set_seed(seed: int):
+    """
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
+    installed).
+
+    Args:
+        seed (:obj:`int`): The seed to set.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    # if is_torch_available():
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+        # ^^ safe to call this function even if cuda is not available
+    # if is_tf_available():
+    #     tf.random.set_seed(seed)

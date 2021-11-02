@@ -37,8 +37,8 @@ REFERENCE
 |Bert-base-chinese| 69.64% | 73.66% |64.42% | 68.26% | 60.16% | 68.81% |
 |Roberta-wwm-ext-base| 82.14% | 80.96% |74.34% | 76.44% | 74.99% | 78.98% |
 
-### CRF
-#### CNN+CRF实现分词
+## CRF
+### CNN+CRF实现分词
 CRF计算loss，采用viterbi算法计算分词结果。语料来自 [Bakeoff 2005](http://sighan.cs.uchicago.edu/bakeoff2005/) \
 torch实现：CRF/cnn_word_seg_torch.py 验证集准确率约91.54%。\
 keras实现：CRF/cnn_word_seg.py 来自苏神的[简明条件随机场CRF介绍（附带纯Keras实现）](https://spaces.ac.cn/archives/5542)
