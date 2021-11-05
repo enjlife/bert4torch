@@ -15,218 +15,24 @@
 """PyTorch optimization for BERT model."""
 
 import math
-import torch
-from torch.optim import Optimizer
-from torch.optim.optimizer import required
-from torch.nn.utils import clip_grad_norm_
-import logging
-import abc
-import sys
-from schedule import SCHEDULES
-
-
-class Adam(Optimizer):
-    """Implements BERT version of Adam algorithm with weight decay fix.
-    Params:
-        lr: learning rate
-        warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
-        t_total: total number of training steps for the learning
-            rate schedule, -1  means constant learning rate. Default: -1
-        schedule: schedule to use for the warmup (see above). Default: 'warmup_linear'
-        b1: Adams b1. Default: 0.9
-        b2: Adams b2. Default: 0.999
-        e: Adams epsilon. Default: 1e-6
-        weight_decay: Weight decay. Default: 0.01
-        max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
-    """
-
-    def __init__(self, params, lr=required, warmup=-1, t_total=-1, schedule='warmup_linear', b1=0.9, b2=0.999, eps=1e-6, weight_decay=0.01, max_grad_norm=1.0):
-        if lr is not required and lr < 0.0:
-            raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
-        if schedule not in SCHEDULES:
-            raise ValueError("Invalid schedule parameter: {}".format(schedule))
-        if not 0.0 <= warmup < 1.0 and not warmup == -1:
-            raise ValueError("Invalid warmup: {} - should be in [0.0, 1.0[ or -1".format(warmup))
-        if not 0.0 <= b1 < 1.0:
-            raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
-        if not 0.0 <= b2 < 1.0:
-            raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
-        if not eps >= 0.0:
-            raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(eps))
-        defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
-                        b1=b1, b2=b2, e=eps, weight_decay=weight_decay,
-                        max_grad_norm=max_grad_norm)
-        super(Adam, self).__init__(params, defaults)
-
-    def get_lr(self):
-        lr = []
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                if len(state) == 0:
-                    return [0]
-                if group['t_total'] != -1:
-                    schedule_fct = SCHEDULES[group['schedule']]
-                    lr_scheduled = group['lr'] * schedule_fct(
-                        state['step']/group['t_total'], group['warmup'])
-                else:
-                    lr_scheduled = group['lr']
-                lr.append(lr_scheduled)
-        return lr
-
-    def step(self, closure=None):
-        """Performs a single optimization step.
-
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-        """
-        loss = None
-        if closure is not None:
-            loss = closure()
-
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-                grad = p.grad.data
-                if grad.is_sparse:
-                    raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-
-                state = self.state[p]
-                # State initialization
-                if len(state) == 0:
-                    state['step'] = 0
-                    # Exponential moving average of gradient values
-                    state['next_m'] = torch.zeros_like(p.data)
-                    # Exponential moving average of squared gradient values
-                    state['next_v'] = torch.zeros_like(p.data)
-
-                next_m, next_v = state['next_m'], state['next_v']
-                beta1, beta2 = group['b1'], group['b2']
-
-                # Add grad clipping
-                if group['max_grad_norm'] > 0:
-                    clip_grad_norm_(p, group['max_grad_norm'])
-
-                # Decay the first and second moment running average coefficient
-                # In-place operations to update the averages at the same time
-                next_m.mul_(beta1).add_(1 - beta1, grad)
-                next_v.mul_(beta2).addcmul_(1 - beta2, grad, grad)
-                update = next_m / (next_v.sqrt() + group['e'])
-
-                # Just adding the square of the weights to the loss function is *not*
-                # the correct way of using L2 regularization/weight decay with Adam,
-                # since that will interact with the m and v parameters in strange ways.
-                #
-                # Instead we want to decay the weights in a manner that doesn't interact
-                # with the m/v parameters. This is equivalent to adding the square
-                # of the weights to the loss with plain (non-momentum) SGD.
-                if group['weight_decay'] > 0.0:
-                    update += group['weight_decay'] * p.data
-
-                if group['t_total'] != -1:
-                    schedule_fct = SCHEDULES[group['schedule']]
-                    lr_scheduled = group['lr'] * schedule_fct(
-                        state['step']/group['t_total'], group['warmup'])
-                else:
-                    lr_scheduled = group['lr']
-
-                update_with_lr = lr_scheduled * update
-                p.data.add_(-update_with_lr)
-
-                state['step'] += 1
-
-                # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
-                # No bias correction
-                # bias_correction1 = 1 - beta1 ** state['step']
-                # bias_correction2 = 1 - beta2 ** state['step']
-
-        return loss
-
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""PyTorch optimization for BERT model."""
-
-import math
-from typing import Callable, Iterable, Optional, Tuple, Union
+from typing import Callable, Iterable, Tuple
 
 import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
-from .logger_configuration import get_logger
-from enum import Enum
+from reference.logger_configuration import get_logger
 
 logger = get_logger(__name__)
 
 
-class ExplicitEnum(Enum):
-    """
-    Enum with more explicit error message for missing values.
-    """
-    @classmethod
-    def _missing_(cls, value):
-        raise ValueError(
-            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
-        )
-
-
-class SchedulerType(ExplicitEnum):
-    LINEAR = "linear"
-    COSINE = "cosine"
-    COSINE_WITH_RESTARTS = "cosine_with_restarts"
-    POLYNOMIAL = "polynomial"
-    CONSTANT = "constant"
-    CONSTANT_WITH_WARMUP = "constant_with_warmup"
-
-
-
+# constant lr
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
-    """
-    Create a schedule with a constant learning rate, using the learning rate set in optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
     return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
 
-
+# warmup
 def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: int, last_epoch: int = -1):
-    """
-    Create a schedule with a constant learning rate preceded by a warmup period during which the learning rate
-    increases linearly between 0 and the initial lr set in the optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
 
     def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
@@ -235,25 +41,8 @@ def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: in
 
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
-
+# warmup + linear to 0
 def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
-    """
-    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
-    a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
-            The total number of training steps.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
 
     def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
@@ -264,30 +53,11 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
-
+# warmup + cosine
 def get_cosine_schedule_with_warmup(
     optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: float = 0.5, last_epoch: int = -1
 ):
-    """
-    Create a schedule with a learning rate that decreases following the values of the cosine function between the
-    initial lr set in the optimizer to 0, after a warmup period during which it increases linearly between 0 and the
-    initial lr set in the optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
-            The total number of training steps.
-        num_cycles (:obj:`float`, `optional`, defaults to 0.5):
-            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
-            following a half-cosine).
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+    """num_cycles控制形状，默认值刚好从1~0
     """
 
     def lr_lambda(current_step):
@@ -298,30 +68,10 @@ def get_cosine_schedule_with_warmup(
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
-
+# cosine with hard restarts
 def get_cosine_with_hard_restarts_schedule_with_warmup(
     optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, last_epoch: int = -1
 ):
-    """
-    Create a schedule with a learning rate that decreases following the values of the cosine function between the
-    initial lr set in the optimizer to 0, with several hard restarts, after a warmup period during which it increases
-    linearly between 0 and the initial lr set in the optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
-            The total number of training steps.
-        num_cycles (:obj:`int`, `optional`, defaults to 1):
-            The number of hard restarts to use.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
 
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
@@ -333,37 +83,10 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
-
+# polynomial
 def get_polynomial_decay_schedule_with_warmup(
     optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=1.0, last_epoch=-1
 ):
-    """
-    Create a schedule with a learning rate that decreases as a polynomial decay from the initial lr set in the
-    optimizer to end lr defined by `lr_end`, after a warmup period during which it increases linearly from 0 to the
-    initial lr set in the optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
-            The total number of training steps.
-        lr_end (:obj:`float`, `optional`, defaults to 1e-7):
-            The end LR.
-        power (:obj:`float`, `optional`, defaults to 1.0):
-            Power factor.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Note: `power` defaults to 1.0 as in the fairseq implementation, which in turn is based on the original BERT
-    implementation at
-    https://github.com/google-research/bert/blob/f39e881b169b9d53bea03d2d341b31707a6c052b/optimization.py#L37
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-
-    """
 
     lr_init = optimizer.defaults["lr"]
     assert lr_init > lr_end, f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})"
@@ -382,56 +105,31 @@ def get_polynomial_decay_schedule_with_warmup(
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
-
-TYPE_TO_SCHEDULER_FUNCTION = {
-    SchedulerType.LINEAR: get_linear_schedule_with_warmup,
-    SchedulerType.COSINE: get_cosine_schedule_with_warmup,
-    SchedulerType.COSINE_WITH_RESTARTS: get_cosine_with_hard_restarts_schedule_with_warmup,
-    SchedulerType.POLYNOMIAL: get_polynomial_decay_schedule_with_warmup,
-    SchedulerType.CONSTANT: get_constant_schedule,
-    SchedulerType.CONSTANT_WITH_WARMUP: get_constant_schedule_with_warmup,
+SCHEDULER_FUNCTION = {
+    'LINEAR': get_linear_schedule_with_warmup,
+    'COSINE': get_cosine_schedule_with_warmup,
+    'COSINE_WITH_RESTARTS': get_cosine_with_hard_restarts_schedule_with_warmup,
+    'POLYNOMIAL': get_polynomial_decay_schedule_with_warmup,
+    'CONSTANT': get_constant_schedule,
+    'CONSTANT_WITH_WARMUP': get_constant_schedule_with_warmup,
 }
 
-
-def get_scheduler(
-    name: Union[str, SchedulerType],
-    optimizer: Optimizer,
-    num_warmup_steps: Optional[int] = None,
-    num_training_steps: Optional[int] = None,
-):
-    """
-    Unified API to get any scheduler from its name.
-
-    Args:
-        name (:obj:`str` or `:obj:`SchedulerType`):
-            The name of the scheduler to use.
-        optimizer (:obj:`torch.optim.Optimizer`):
-            The optimizer that will be used during training.
-        num_warmup_steps (:obj:`int`, `optional`):
-            The number of warmup steps to do. This is not required by all schedulers (hence the argument being
-            optional), the function will raise an error if it's unset and the scheduler type requires it.
-        num_training_steps (:obj:`int`, `optional`):
-            The number of training steps to do. This is not required by all schedulers (hence the argument being
-            optional), the function will raise an error if it's unset and the scheduler type requires it.
-    """
-    name = SchedulerType(name)
-    schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
-    if name == SchedulerType.CONSTANT:
+def get_scheduler(name, optimizer, num_warmup_steps=None, num_training_steps=None):
+    if name not in SCHEDULER_FUNCTION:
+        raise ValueError(f"{name} not in SCHEDULER_FUNCTION.")
+    schedule_func = SCHEDULER_FUNCTION[name]
+    if name == 'CONSTANT':
         return schedule_func(optimizer)
-
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:
         raise ValueError(f"{name} requires `num_warmup_steps`, please provide that argument.")
-
-    if name == SchedulerType.CONSTANT_WITH_WARMUP:
+    if name == 'CONSTANT_WITH_WARMUP':
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
-
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:
         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
 
     return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
-
 
 class AdamW(Optimizer):
     """
@@ -462,7 +160,7 @@ class AdamW(Optimizer):
         weight_decay: float = 0.0,
         correct_bias: bool = True,
     ):
-        require_version("torch>=1.5.0")  # add_ with alpha
+        # require_version("torch>=1.5.0")  # add_ with alpha
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
         if not 0.0 <= betas[0] < 1.0:
@@ -625,7 +323,7 @@ class Adafactor(Optimizer):
         relative_step=True,
         warmup_init=False,
     ):
-        require_version("torch>=1.5.0")  # add_ with alpha
+        # require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
             raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:
@@ -795,23 +493,189 @@ class AdafactorSchedule(LambdaLR):
             lrs = self.base_lrs  # if called before stepping
         return lrs
 
+# class ExplicitEnum(Enum):
+#     """
+#     Enum with more explicit error message for missing values.
+#     """
+#     @classmethod
+#     def _missing_(cls, value):
+#         raise ValueError(
+#             f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
+#         )
 
-def get_adafactor_schedule(optimizer, initial_lr=0.0):
-    """
-    Get a proxy schedule for :class:`~transformers.optimization.Adafactor`
+# class SchedulerType(ExplicitEnum):
+#     LINEAR = "linear"
+#     COSINE = "cosine"
+#     COSINE_WITH_RESTARTS = "cosine_with_restarts"
+#     POLYNOMIAL = "polynomial"
+#     CONSTANT = "constant"
+#     CONSTANT_WITH_WARMUP = "constant_with_warmup"
 
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        initial_lr (:obj:`float`, `optional`, defaults to 0.0):
-            Initial lr
-
-    Return:
-        :class:`~transformers.optimization.Adafactor` proxy schedule object.
-
-
-    """
-    return AdafactorSchedule(optimizer, initial_lr)
+# TYPE_TO_SCHEDULER_FUNCTION = {
+#     SchedulerType.LINEAR: get_linear_schedule_with_warmup,
+#     SchedulerType.COSINE: get_cosine_schedule_with_warmup,
+#     SchedulerType.COSINE_WITH_RESTARTS: get_cosine_with_hard_restarts_schedule_with_warmup,
+#     SchedulerType.POLYNOMIAL: get_polynomial_decay_schedule_with_warmup,
+#     SchedulerType.CONSTANT: get_constant_schedule,
+#     SchedulerType.CONSTANT_WITH_WARMUP: get_constant_schedule_with_warmup,
+# }
 
 
+# def get_scheduler(
+#     name: Union[str, SchedulerType],
+#     optimizer: Optimizer,
+#     num_warmup_steps: Optional[int] = None,
+#     num_training_steps: Optional[int] = None,
+# ):
+#     """
+#     Unified API to get any scheduler from its name.
+#
+#     Args:
+#         name (:obj:`str` or `:obj:`SchedulerType`):
+#             The name of the scheduler to use.
+#         optimizer (:obj:`torch.optim.Optimizer`):
+#             The optimizer that will be used during training.
+#         num_warmup_steps (:obj:`int`, `optional`):
+#             The number of warmup steps to do. This is not required by all schedulers (hence the argument being
+#             optional), the function will raise an error if it's unset and the scheduler type requires it.
+#         num_training_steps (:obj:`int`, `optional`):
+#             The number of training steps to do. This is not required by all schedulers (hence the argument being
+#             optional), the function will raise an error if it's unset and the scheduler type requires it.
+#     """
+#     name = SchedulerType(name)
+#     schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
+#     if name == SchedulerType.CONSTANT:
+#         return schedule_func(optimizer)
+#
+#     # All other schedulers require `num_warmup_steps`
+#     if num_warmup_steps is None:
+#         raise ValueError(f"{name} requires `num_warmup_steps`, please provide that argument.")
+#
+#     if name == SchedulerType.CONSTANT_WITH_WARMUP:
+#         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+#
+#     # All other schedulers require `num_training_steps`
+#     if num_training_steps is None:
+#         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
+#
+#     return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
+
+# class Adam(Optimizer):
+#     """Implements BERT version of Adam algorithm with weight decay fix.
+#     Params:
+#         lr: learning rate
+#         warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
+#         t_total: total number of training steps for the learning
+#             rate schedule, -1  means constant learning rate. Default: -1
+#         schedule: schedule to use for the warmup (see above). Default: 'warmup_linear'
+#         b1: Adams b1. Default: 0.9
+#         b2: Adams b2. Default: 0.999
+#         e: Adams epsilon. Default: 1e-6
+#         weight_decay: Weight decay. Default: 0.01
+#         max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
+#     """
+#
+#     def __init__(self, params, lr=required, warmup=-1, t_total=-1, schedule='warmup_linear', b1=0.9, b2=0.999, eps=1e-6, weight_decay=0.01, max_grad_norm=1.0):
+#         if lr is not required and lr < 0.0:
+#             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
+#         if schedule not in SCHEDULES:
+#             raise ValueError("Invalid schedule parameter: {}".format(schedule))
+#         if not 0.0 <= warmup < 1.0 and not warmup == -1:
+#             raise ValueError("Invalid warmup: {} - should be in [0.0, 1.0[ or -1".format(warmup))
+#         if not 0.0 <= b1 < 1.0:
+#             raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
+#         if not 0.0 <= b2 < 1.0:
+#             raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
+#         if not eps >= 0.0:
+#             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(eps))
+#         defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
+#                         b1=b1, b2=b2, e=eps, weight_decay=weight_decay,
+#                         max_grad_norm=max_grad_norm)
+#         super(Adam, self).__init__(params, defaults)
+#
+#     def get_lr(self):
+#         lr = []
+#         for group in self.param_groups:
+#             for p in group['params']:
+#                 state = self.state[p]
+#                 if len(state) == 0:
+#                     return [0]
+#                 if group['t_total'] != -1:
+#                     schedule_fct = SCHEDULES[group['schedule']]
+#                     lr_scheduled = group['lr'] * schedule_fct(
+#                         state['step']/group['t_total'], group['warmup'])
+#                 else:
+#                     lr_scheduled = group['lr']
+#                 lr.append(lr_scheduled)
+#         return lr
+#
+#     def step(self, closure=None):
+#         """Performs a single optimization step.
+#
+#         Arguments:
+#             closure (callable, optional): A closure that reevaluates the model
+#                 and returns the loss.
+#         """
+#         loss = None
+#         if closure is not None:
+#             loss = closure()
+#
+#         for group in self.param_groups:
+#             for p in group['params']:
+#                 if p.grad is None:
+#                     continue
+#                 grad = p.grad.data
+#                 if grad.is_sparse:
+#                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+#
+#                 state = self.state[p]
+#                 # State initialization
+#                 if len(state) == 0:
+#                     state['step'] = 0
+#                     # Exponential moving average of gradient values
+#                     state['next_m'] = torch.zeros_like(p.data)
+#                     # Exponential moving average of squared gradient values
+#                     state['next_v'] = torch.zeros_like(p.data)
+#
+#                 next_m, next_v = state['next_m'], state['next_v']
+#                 beta1, beta2 = group['b1'], group['b2']
+#
+#                 # Add grad clipping
+#                 if group['max_grad_norm'] > 0:
+#                     clip_grad_norm_(p, group['max_grad_norm'])
+#
+#                 # Decay the first and second moment running average coefficient
+#                 # In-place operations to update the averages at the same time
+#                 next_m.mul_(beta1).add_(1 - beta1, grad)
+#                 next_v.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+#                 update = next_m / (next_v.sqrt() + group['e'])
+#
+#                 # Just adding the square of the weights to the loss function is *not*
+#                 # the correct way of using L2 regularization/weight decay with Adam,
+#                 # since that will interact with the m and v parameters in strange ways.
+#                 #
+#                 # Instead we want to decay the weights in a manner that doesn't interact
+#                 # with the m/v parameters. This is equivalent to adding the square
+#                 # of the weights to the loss with plain (non-momentum) SGD.
+#                 if group['weight_decay'] > 0.0:
+#                     update += group['weight_decay'] * p.data
+#
+#                 if group['t_total'] != -1:
+#                     schedule_fct = SCHEDULES[group['schedule']]
+#                     lr_scheduled = group['lr'] * schedule_fct(
+#                         state['step']/group['t_total'], group['warmup'])
+#                 else:
+#                     lr_scheduled = group['lr']
+#
+#                 update_with_lr = lr_scheduled * update
+#                 p.data.add_(-update_with_lr)
+#
+#                 state['step'] += 1
+#
+#                 # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
+#                 # No bias correction
+#                 # bias_correction1 = 1 - beta1 ** state['step']
+#                 # bias_correction2 = 1 - beta2 ** state['step']
+#
+#         return loss

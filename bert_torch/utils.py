@@ -1,31 +1,26 @@
-"""
-Utilities for working with the local dataset cache.
-This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
-Copyright by the AllenNLP authors.
-"""
+import random
+import numpy as np
+import math
 from tqdm import tqdm
 import os
 import sys
-import warnings
-# from dataclasses import dataclass
-from typing import Optional, Tuple
 from functools import wraps
 import shutil
 import torch
 import fnmatch
-import requests
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import json
 import tempfile
 from hashlib import sha256
 import boto3
 import requests
+import time
+from datetime import timedelta
 from botocore.exceptions import ClientError
-from .local_logging import get_logger
-
+from reference.local_logging import get_logger
+# from dataclasses import dataclass
 
 logger = get_logger(__name__)
 
@@ -42,6 +37,58 @@ try:
 except (AttributeError, ImportError):
     PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
                                               os.path.join(os.path.expanduser("~"), '.pytorch_pretrained_bert'))
+
+# -----------------------------------------------------------
+def get_time_dif(start_time):
+    """获取已使用时间"""
+    end_time = time.time()
+    time_dif = end_time - start_time
+    return timedelta(seconds=int(round(time_dif)))
+
+# -----------------------------------------------------------
+def set_seed(seed: int):
+    """
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
+    installed).
+
+    Args:
+        seed (:obj:`int`): The seed to set.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    # if is_torch_available():
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+        # ^^ safe to call this function even if cuda is not available
+    # if is_tf_available():
+    #     tf.random.set_seed(seed)
+
+# -----------------------------------------------------------
+def _gelu_python(x):
+    """
+    Original Implementation of the GELU activation function in Google BERT repo when initially created. For
+    information: OpenAI GPT's GELU is slightly different (and gives slightly different results): 0.5 * x * (1 +
+    torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
+    Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
+    """
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+
+if version.parse(torch.__version__) < version.parse("1.4"):
+    gelu = _gelu_python
+else:
+    gelu = nn.functional.gelu
+
+act2fn = {'relu': nn.functional.relu, 'sigmoid': torch.sigmoid, 'gelu': gelu}
+
+# ------------------------------------------------
+# load_weight
+"""
+Utilities for working with the local dataset cache.
+This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
+Copyright by the AllenNLP authors.
+"""
+
 
 CONFIG_NAME = "config.json"
 WEIGHTS_NAME = "pytorch_model.bin"

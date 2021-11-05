@@ -27,7 +27,7 @@ def build_dataset(config):
                 if max_len:
                     if len(token) < max_len:
                         mask = [1] * len(token_ids) + [0] * (max_len - len(token))
-                        token_ids += ([0] * (max_len - len(token)))
+                        token_ids += ([0] * (max_len - len(token_ids)))
                     else:
                         mask = [1] * max_len
                         token_ids = token_ids[:max_len]

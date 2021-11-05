@@ -1,7 +1,46 @@
+import sys
 import torch.nn as nn
 import torch
 import math
-from ..utils import BertLayerNorm
+from packaging import version
+from .utils import act2fn
+
+
+class BertLayer(nn.Module):
+    """Transformer block
+    MultiHeadedAttention with sublayer: self_attention -> dense -> dropout -> add&&norm ->
+    FFN with sublayer: dense1 -> act_fn -> dense2 -> dropout -> add&&norm
+    """
+    def __init__(self, config):
+        super(BertLayer, self).__init__()
+        self.attention = BertAttention(config)
+        self.intermediate = BertIntermediate(config)
+        self.output = PFFOutput(config)
+
+    def forward(self, hidden_states, attention_mask):
+        attention_output = self.attention(hidden_states, attention_mask)
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+
+        return layer_output
+
+
+class BertEncoder(nn.Module):
+    """Bert Encoder"""
+    def __init__(self, config):
+        super(BertEncoder, self).__init__()
+        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=False):
+        all_encoder_layers = []
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, attention_mask)
+            if output_all_encoded_layers:
+                all_encoder_layers.append(hidden_states)
+        if not output_all_encoded_layers:
+            all_encoder_layers.append(hidden_states)
+
+        return all_encoder_layers
 
 
 class BertAttention(nn.Module):
@@ -96,6 +135,156 @@ class AttentionOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + x)
         return hidden_states
+
+
+class PFFOutput(nn.Module):
+    def __init__(self, config):
+        super(PFFOutput, self).__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, x):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + x)
+        return hidden_states
+
+
+class BertIntermediate(nn.Module):
+    def __init__(self, config):
+        super(BertIntermediate, self).__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str) or (sys.version_info[0] == 2 and isinstance(config.hidden_act, unicode)):
+            self.intermediate_act_fn = act2fn[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
+
+
+# TODO: conditional layer normalization
+class BertLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-12):
+        super(BertLayerNorm, self).__init__()
+
+        # in tf: weight: gamma, bias: beta
+        # so when load weight in tf, need exchange
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.bias = nn.Parameter(torch.zeros(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, x):
+        mean = x.mean(-1, keepdim=True)
+        std = (x - mean).pow(2).mean(-1, keepdim=True)
+        x = (x - mean) / torch.sqrt(std + self.variance_epsilon)
+
+        return self.weight * x + self.bias
+
+
+# -------------------------------------------------------------------------------------
+# embeddings
+
+class BertEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
+    def __init__(self, config):
+        super(BertEmbeddings, self).__init__()
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        if version.parse(torch.__version__) > version.parse("1.6.0"):
+            self.register_buffer(
+                "token_type_ids",
+                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+                persistent=False,)
+
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length: seq_length + past_key_values_length]
+
+        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
+        # issue #5664
+        if token_type_ids is None:
+            if hasattr(self, "token_type_ids"):
+                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = inputs_embeds + token_type_embeddings
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings += position_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+
+        return embeddings
+
+
+class PositionalEmbedding(nn.Module):
+    """
+    p_k,2i = sin(k/10000^(2i/d))
+    p_k,2i+1 = cos(k/10000^(2i/d))
+    """
+    def __init__(self, hidden_size):
+        super(PositionalEmbedding, self).__init__()
+        # self.hidden_size = hidden_size
+        inv_freq = 1 / (10000 ** (torch.arange(0.0, hidden_size, 2.0) / hidden_size))
+
+        # register a buffer that should not to be considered a model parameter.
+        # For example, BatchNorm's ``running_mean``
+        self.register_buffer('inv_freq', inv_freq)
+
+    def forward(self, pos_seq, bsz=None):
+        # ger: outer product of vec1 and vec2
+        sinusoid_inp = torch.ger(pos_seq, self.inv_freq)
+        pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1)
+        # bsz not know now
+        if bsz is not None:
+            return pos_emb[:, None, :].expand(-1, bsz, -1)
+        else:
+            return pos_emb[:, None, :]
+
+
+class SegmentEmbedding(nn.Embedding):
+    def __init__(self, embed_size=512):
+        super().__init__(3, embed_size, padding_idx=0)
+
+
+class TokenEmbedding(nn.Embedding):
+    def __init__(self, vocab_size, embed_size=512):
+        super().__init__(vocab_size, embed_size, padding_idx=0)
+
+
+
 
 
 # class MultiHeadedAttention(nn.Module):

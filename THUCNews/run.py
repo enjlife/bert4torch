@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.getcwd()+'/..'))
 import time
 import torch
 from train_eval import train, test
-from bert_pytorch import BertConfig, BertForSequenceClassification, BertTokenizer
+from bert_torch import BertConfig, BertForSequenceClassification, BertTokenizer
 from importlib import import_module
 import argparse
 from utils import build_dataset, build_iterator, get_time_dif

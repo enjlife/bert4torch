@@ -2,7 +2,7 @@
 # from bert4keras.models import build_transformer_model
 # # from bert_pytorch import BERT, BertConfig
 # from transformers import BertModel, BertTokenizer, AutoTokenizer
-# from bert4keras import models
+from bert4keras import models
 # from bert_pytorch import BertModel
 # import pandas as pd
 import os
