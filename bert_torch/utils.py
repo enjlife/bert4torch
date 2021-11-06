@@ -39,7 +39,7 @@ except (AttributeError, ImportError):
                                               os.path.join(os.path.expanduser("~"), '.pytorch_pretrained_bert'))
 
 # -----------------------------------------------------------
-def get_time_dif(start_time):
+def time_diff(start_time):
     """获取已使用时间"""
     end_time = time.time()
     time_dif = end_time - start_time

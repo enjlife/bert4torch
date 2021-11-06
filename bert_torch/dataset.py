@@ -23,8 +23,7 @@ class DatasetBase(object):
         if self.residue and self.index == self.n_batches:
             batches = self.data_list[self.index * self.batch_size: len(self.data_list)]
             self.index += 1
-            batches = self._to_tensor(batches)
-            return batches
+            return self._to_tensor(batches)
 
         elif self.index >= self.n_batches:
             self.index = 0
@@ -32,8 +31,7 @@ class DatasetBase(object):
         else:
             batches = self.data_list[self.index * self.batch_size: (self.index + 1) * self.batch_size]
             self.index += 1
-            batches = self._to_tensor(batches)
-            return batches
+            return self._to_tensor(batches)
 
     def __iter__(self):
         if self.rand:

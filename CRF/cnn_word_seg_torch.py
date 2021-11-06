@@ -9,10 +9,7 @@ from torch.optim import Adam
 import torch.nn.functional as F
 from datetime import timedelta
 
-# TODO 数据准备 to_id()
-# TODO 数据准备 打乱数据
-# TODO batch的准召
-# TODO build Train
+# TODO 准确率计算函数的bug修复
 
 
 def get_time_dif(start_time):
@@ -205,7 +202,7 @@ class Train:
                 rec_total += rec
                 n += 1
         return loss_total/n, acc_total/n, rec_total/n
-
+    # 重写了准确率计算的函数，有bug待修复
     def cal_acc(self, y_pre, y_true, mask):
         n = len(y_pre)
         acc, rec = 0.0, 0.0

@@ -1,13 +1,5 @@
 # bert4torch
 
-REFERENCE
-
-[BERT-pytorch](https://github.com/codertimo/BERT-pytorch)
-
-[transformers](https://github.com/huggingface/transformers)
-
-[Bert-Chinese-Text-Classification-Pytorch](https://github.com/649453932/Bert-Chinese-Text-Classification-Pytorch)
-
 ## 模型下载
 ### Hugging Face bert-base-chinese
 模型可以通过两种方式下载:
@@ -44,4 +36,8 @@ torch实现：CRF/cnn_word_seg_torch.py 验证集准确率约91.54%。\
 keras实现：CRF/cnn_word_seg.py 来自苏神的[简明条件随机场CRF介绍（附带纯Keras实现）](https://spaces.ac.cn/archives/5542)
 
 
+## REFERENCE
 
+[BERT-pytorch](https://github.com/codertimo/BERT-pytorch)  
+[transformers](https://github.com/huggingface/transformers)  
+[Bert-Chinese-Text-Classification-Pytorch](https://github.com/649453932/Bert-Chinese-Text-Classification-Pytorch)
