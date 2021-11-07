@@ -61,6 +61,7 @@ class BertConfig(object):
                  num_qkv=0,
                  seg_emb=False,
                  with_unilm=False,
+                 last_fn=None
                  ):
         """Constructs BertConfig.
 
@@ -92,6 +93,7 @@ class BertConfig(object):
             for key, value in json_config.items():
                 self.__dict__[key] = value
             self.with_unilm = with_unilm
+            self.last_fn = last_fn
 
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
@@ -116,6 +118,7 @@ class BertConfig(object):
             self.num_qkv = num_qkv
             self.seg_emb = seg_emb
             self.with_unilm = with_unilm
+            self.last_fn = last_fn
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -151,7 +154,6 @@ class BertPreTrainedModel(nn.Module):
     """
     BERT model : Bidirectional Encoder Representations from Transformers.
     """
-
     def __init__(self, config, *args, **kwargs):
         super().__init__()
         if not isinstance(config, BertConfig):
@@ -320,52 +322,8 @@ class BertPreTrainedModel(nn.Module):
 
 
 class BertModel(BertPreTrainedModel):
-    """BERT model ("Bidirectional Embedding Representations from a Transformer").
-
-    Params:
-        config: a BertConfig class instance with the configuration to build a new model
-
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
-            `extract_features.py`, `run_classifier.py` and `run_squad.py`)
-        `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
-            types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
-            a `sentence B` token (see BERT paper for more details).
-        `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
-            selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
-            a batch has varying length sentences.
-        `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
-
-    Outputs: Tuple of (encoded_layers, pooled_output)
-        `encoded_layers`: controled by `output_all_encoded_layers` argument:
-            - `output_all_encoded_layers=True`: outputs a list of the full sequences of encoded-hidden-states at the end
-                of each attention block (i.e. 12 full sequences for BERT-base, 24 for BERT-large), each
-                encoded-hidden-state is a torch.FloatTensor of size [batch_size, sequence_length, hidden_size],
-            - `output_all_encoded_layers=False`: outputs only the full sequence of hidden-states corresponding
-                to the last attention block of shape [batch_size, sequence_length, hidden_size],
-        `pooled_output`: a torch.FloatTensor of size [batch_size, hidden_size] which is the output of a
-            classifier pretrained on top of the hidden state associated to the first character of the
-            input (`CLS`) to train on the Next-Sentence task (see BERT's paper).
-
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-
-    config = modeling.BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-
-    model = modeling.BertModel(config=config)
-    all_encoder_layers, pooled_output = model(input_ids, token_type_ids, input_mask)
-    ```
-    """
-
     def __init__(self, config, *args, **kwargs):
-        super().__init__(config)
+        super().__init__(config, *args, **kwargs)
         # embedding for BERT, sum of positional, segment, token embeddings
         self.embeddings = BertEmbeddings(config)
         # transformer encoder
@@ -746,14 +704,15 @@ class Pooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+        self.activation = nn.Tanh() if config.last_fn else None
 
     def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
+        if self.activation:
+            pooled_output = self.activation(pooled_output)
         return pooled_output
 
 

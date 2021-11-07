@@ -3,7 +3,7 @@ import json
 import torch.nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff
+from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, BertModel, Trainer, time_diff
 from reference.logger_configuration import get_logger, _get_library_root_logger
 
 
@@ -66,12 +66,11 @@ class Config(object):
         self.with_cuda = True
         self.cuda_devices = None
         self.num_warmup_steps = 0.1  # total_batch的一个比例
-        self.log_freq = 500
+        self.log_freq = 1000
         self.logger = logger
 
 
 class TNEWSTrainer(Trainer):
-
     def __init__(self, config, train_iter, dev_iter, model):
         self.data_path = config.data_path
         self.labels = config.labels
@@ -92,9 +91,9 @@ class TNEWSTrainer(Trainer):
                              bar_format="{l_bar}{r_bar}")
             for _, data in data_iter:
                 token_ids, type_ids, mask, labels = data
-                logits = self.model(token_ids, type_ids, mask)
+                _, logits = self.model(token_ids, type_ids, mask)
                 self.model.zero_grad()
-                loss = F.nll_loss(logits, labels)
+                loss = F.cross_entropy(logits, labels)
                 loss.backward()
                 self.optimizer.step()
                 self.scheduler.step()
@@ -128,8 +127,8 @@ class TNEWSTrainer(Trainer):
         with torch.no_grad():
             for data in data_iter if data_iter else self.dev_data:
                 token_ids, type_ids, mask, labels = data
-                logits = model(token_ids, type_ids, mask)
-                loss = F.nll_loss(logits, labels)
+                _, logits = model(token_ids, type_ids, mask)
+                loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
                 item_total += torch.numel(labels)
                 acc_total += torch.sum(logits.argmax(axis=1).eq(labels)).item()
@@ -144,7 +143,8 @@ class TNEWSTrainer(Trainer):
         with torch.no_grad():
             for data in test_iter:
                 token_ids, type_ids, mask, labels = data
-                logits = self.model(token_ids, type_ids, mask).argmax(axis=1)
+                _, logits = self.model(token_ids, type_ids, mask)
+                logits = logits.argmax(axis=1)
                 logits = logits.cpu().numpy().tolist()
                 res.extend(logits)
         fw = open(self.data_path + 'tnews_predict.json', 'w')
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     train_iter = DataIterator(train_data, config.batch_size, config.device)
     dev_iter = DataIterator(dev_data, config.batch_size, config.device)
 
-    model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
+    model = BertModel.from_pretrained(config.pretrained_path, config.num_classes)
     trainer = TNEWSTrainer(config, train_iter, dev_iter, model)
     trainer.train()
     trainer.test()
