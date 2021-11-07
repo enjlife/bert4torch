@@ -22,7 +22,7 @@ from botocore.exceptions import ClientError
 from reference.local_logging import get_logger
 # from dataclasses import dataclass
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 try:
     from urllib.parse import urlparse

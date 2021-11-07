@@ -22,10 +22,6 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
-from reference.logger_configuration import get_logger
-
-logger = get_logger(__name__)
-
 
 # constant lr
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):

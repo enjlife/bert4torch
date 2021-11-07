@@ -26,7 +26,7 @@ import json
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from layers import BertEmbeddings, BertLayerNorm
+from .layers import BertEmbeddings, BertLayerNorm, BertEncoder
 
 from .utils import act2fn, PRETRAINED_MODEL_ARCHIVE_MAP, cached_path, CONFIG_NAME, \
                     BERT_CONFIG_NAME, get_logger, WEIGHTS_NAME, TF_WEIGHTS_NAME, load_tf_weights_in_bert
@@ -580,7 +580,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
-        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layer=False)
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 

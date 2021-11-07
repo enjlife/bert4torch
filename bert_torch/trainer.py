@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from bert_torch import get_scheduler
+from .optimizers import get_scheduler
+from reference.local_logging import get_logger, _get_library_root_logger
+
+logger = _get_library_root_logger()
 
 
 class Trainer(object):
@@ -28,7 +31,7 @@ class Trainer(object):
 
         self.log_freq = config.log_freq
         self.logger = config.logger
-        self.logger.info("Total Parameters:", sum([p.nelement() for p in self.model.parameters()]))
+        self.logger.info("Total Parameters: %d" % sum([p.nelement() for p in self.model.parameters()]))
 
     def train(self):
         raise NotImplementedError
@@ -43,7 +46,7 @@ class Trainer(object):
         output_path = save_path if best else save_path + ".ep%d" % epoch
         torch.save(self.model.state_dict(), output_path)
         # self.model.to(self.device)
-        print("EP:%d Model Saved on:" % epoch, output_path)
+        logger.info("EP:%d Model Saved on:%s" % (epoch, output_path))
         return output_path
 
 
