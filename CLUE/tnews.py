@@ -94,7 +94,7 @@ class TNEWSTrainer(Trainer):
                 token_ids, type_ids, mask, labels = data
                 logits = self.model(token_ids, type_ids, mask)
                 self.model.zero_grad()
-                loss = F.cross_entropy(logits, labels)
+                loss = F.nll_loss(logits, labels)
                 loss.backward()
                 self.optimizer.step()
                 self.scheduler.step()
@@ -129,7 +129,7 @@ class TNEWSTrainer(Trainer):
             for data in data_iter if data_iter else self.dev_data:
                 token_ids, type_ids, mask, labels = data
                 logits = model(token_ids, type_ids, mask)
-                loss = F.cross_entropy(logits, labels)
+                loss = F.nll_loss(logits, labels)
                 loss_total += loss.item()
                 item_total += torch.numel(labels)
                 acc_total += torch.sum(logits.argmax(axis=1).eq(labels)).item()
@@ -141,11 +141,12 @@ class TNEWSTrainer(Trainer):
         test_data = load_dataset(self.data_path + 'test.json')
         test_iter = DataIterator(test_data, config.batch_size, config.device)
         res = []
-        for data in test_iter:
-            token_ids, type_ids, mask, labels = data
-            logits = self.model(token_ids, type_ids, mask).argmax(axis=1)
-            logits = logits.cpu().numpy().tolist()
-            res.extend(logits)
+        with torch.no_grad():
+            for data in test_iter:
+                token_ids, type_ids, mask, labels = data
+                logits = self.model(token_ids, type_ids, mask).argmax(axis=1)
+                logits = logits.cpu().numpy().tolist()
+                res.extend(logits)
         fw = open(self.data_path + 'tnews_predict.json', 'w')
         for i, r in enumerate(res):
             l = json.dumps({'id': str(i), 'label': self.labels[r]})
