@@ -185,9 +185,6 @@ class BertLayerNorm(nn.Module):
         return self.weight * x + self.bias
 
 
-# -------------------------------------------------------------------------------------
-# embeddings
-
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -274,17 +271,32 @@ class PositionalEmbedding(nn.Module):
             return pos_emb[:, None, :]
 
 
-class SegmentEmbedding(nn.Embedding):
-    def __init__(self, embed_size=512):
-        super().__init__(3, embed_size, padding_idx=0)
+class Pooler(nn.Module):
+    """ x[:,0] -> dense -> tanh
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh() if config.last_fn else None
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        if self.activation:
+            pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 
-class TokenEmbedding(nn.Embedding):
-    def __init__(self, vocab_size, embed_size=512):
-        super().__init__(vocab_size, embed_size, padding_idx=0)
-
-
-
+# class SegmentEmbedding(nn.Embedding):
+#     def __init__(self, embed_size=512):
+#         super().__init__(3, embed_size, padding_idx=0)
+#
+#
+# class TokenEmbedding(nn.Embedding):
+#     def __init__(self, vocab_size, embed_size=512):
+#         super().__init__(vocab_size, embed_size, padding_idx=0)
 
 
 # class MultiHeadedAttention(nn.Module):

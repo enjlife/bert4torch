@@ -26,7 +26,7 @@ import json
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from .layers import BertEmbeddings, BertLayerNorm, BertEncoder
+from .layers import BertEmbeddings, BertLayerNorm, BertEncoder, Pooler
 
 from .utils import act2fn, PRETRAINED_MODEL_ARCHIVE_MAP, cached_path, CONFIG_NAME, \
                     BERT_CONFIG_NAME, get_logger, WEIGHTS_NAME, TF_WEIGHTS_NAME, load_tf_weights_in_bert
@@ -61,7 +61,7 @@ class BertConfig(object):
                  num_qkv=0,
                  seg_emb=False,
                  with_unilm=False,
-                 last_fn=None
+                 last_fn='tanh'
                  ):
         """Constructs BertConfig.
 
@@ -149,6 +149,7 @@ class BertConfig(object):
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
 
 class BertPreTrainedModel(nn.Module):
     """
@@ -696,24 +697,6 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             return total_loss
         else:
             return start_logits, end_logits
-
-
-class Pooler(nn.Module):
-    """ x[:,0] -> dense -> tanh
-    """
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh() if config.last_fn else None
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        if self.activation:
-            pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 class BertPredictionHeadTransform(nn.Module):

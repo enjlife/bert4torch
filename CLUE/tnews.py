@@ -53,12 +53,12 @@ class Config(object):
         self.data_path = '../data/tnews/'  # train.json, valid.json, test.json
         self.labels = ['100', '101', '102', '103', '104', '106', '107', '108', '109', '110', '112', '113', '114', '115', '116']  # 类别名单
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
-        self.require_improvement = 10000  # early stopping: 1000 batches
+        self.require_improvement = 100000  # early stopping: 1000 batches
         self.num_classes = len(self.labels)
-        self.num_epochs = 10
-        self.batch_size = 16
+        self.num_epochs = 40
+        self.batch_size = 8
         self.max_len = 128
-        self.lr = 5e-4
+        self.lr = 5e-4  # 5e-4
         self.scheduler = 'CONSTANT'  # 'CONSTANT_WITH_WARMUP'  学习率策略
         self.pretrained_path = '../pretrained_model/bert-base-chinese'
         self.betas = (0.9, 0.999)
@@ -66,8 +66,9 @@ class Config(object):
         self.with_cuda = True
         self.cuda_devices = None
         self.num_warmup_steps = 0.1  # total_batch的一个比例
-        self.log_freq = 1000
+        self.log_freq = 2000
         self.logger = logger
+        self.save_path = 'trained_11-13.model'
 
 
 class TNEWSTrainer(Trainer):
@@ -91,7 +92,7 @@ class TNEWSTrainer(Trainer):
                              bar_format="{l_bar}{r_bar}")
             for _, data in data_iter:
                 token_ids, type_ids, mask, labels = data
-                _, logits = self.model(token_ids, type_ids, mask)
+                logits = self.model(token_ids, type_ids, mask)
                 self.model.zero_grad()
                 loss = F.cross_entropy(logits, labels)
                 loss.backward()
@@ -127,7 +128,7 @@ class TNEWSTrainer(Trainer):
         with torch.no_grad():
             for data in data_iter if data_iter else self.dev_data:
                 token_ids, type_ids, mask, labels = data
-                _, logits = model(token_ids, type_ids, mask)
+                logits = model(token_ids, type_ids, mask)
                 loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
                 item_total += torch.numel(labels)
@@ -143,7 +144,7 @@ class TNEWSTrainer(Trainer):
         with torch.no_grad():
             for data in test_iter:
                 token_ids, type_ids, mask, labels = data
-                _, logits = self.model(token_ids, type_ids, mask)
+                logits = self.model(token_ids, type_ids, mask)
                 logits = logits.argmax(axis=1)
                 logits = logits.cpu().numpy().tolist()
                 res.extend(logits)
@@ -164,8 +165,11 @@ if __name__ == '__main__':
     train_iter = DataIterator(train_data, config.batch_size, config.device)
     dev_iter = DataIterator(dev_data, config.batch_size, config.device)
 
-    model = BertModel.from_pretrained(config.pretrained_path, config.num_classes)
+    model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
+    # model.load_state_dict(torch.load('trained2.model'))
     trainer = TNEWSTrainer(config, train_iter, dev_iter, model)
     trainer.train()
+    # loss, acc = trainer.dev()
+    # print('loss: %f, acc: %f' % (loss, acc))
     trainer.test()
 

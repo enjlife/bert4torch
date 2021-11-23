@@ -28,7 +28,7 @@ class Trainer(object):
         self.optimizer = Adam(optimizer_grouped_parameters, lr=config.lr, betas=config.betas)
         num_warmup_steps = self.num_epochs * len(self.train_data) * config.num_warmup_steps
         self.scheduler = get_scheduler(config.scheduler, self.optimizer, num_warmup_steps)
-
+        self.save_path = config.save_path
         self.log_freq = config.log_freq
         self.logger = config.logger
         self.logger.info("Total Parameters: %d" % sum([p.nelement() for p in self.model.parameters()]))
@@ -42,8 +42,8 @@ class Trainer(object):
     def test(self):
         raise NotImplementedError
 
-    def save(self, epoch, save_path='trained.model', best=True):
-        output_path = save_path if best else save_path + ".ep%d" % epoch
+    def save(self, epoch, best=True):
+        output_path = self.save_path if best else self.save_path + ".ep%d" % epoch
         torch.save(self.model.state_dict(), output_path)
         # self.model.to(self.device)
         logger.info("EP:%d Model Saved on:%s" % (epoch, output_path))
