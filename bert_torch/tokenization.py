@@ -63,7 +63,7 @@ def load_vocab(vocab_file):
 
 
 def whitespace_tokenize(text):
-    """Runs basic whitespace cleaning and splitting on a piece of text."""
+    """去除前后的空白符，按空格切分"""
     text = text.strip()
     if not text:
         return []
@@ -203,29 +203,19 @@ class BasicTokenizer(object):
     def __init__(self,
                  do_lower_case=True,
                  never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
-        """Constructs a BasicTokenizer.
-        Args:
-          do_lower_case: Whether to lower case the input.
-        """
         self.do_lower_case = do_lower_case
         self.never_split = never_split
 
     def tokenize(self, text):
         """Tokenizes a piece of text."""
-        text = self._clean_text(text)
-        # This was added on November 1st, 2018 for the multilingual and Chinese
-        # models. This is also applied to the English models now, but it doesn't
-        # matter since the English models were not trained on any Chinese data
-        # and generally don't have any Chinese data in them (there are Chinese
-        # characters in the vocabulary because Wikipedia does have some Chinese
-        # words in the English Wikipedia.).
-        text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
+        text = self._clean_text(text)  # 去除一些无效的字符和空白符
+        text = self._tokenize_chinese_chars(text)  # cjk字符周围添加空格
+        orig_tokens = whitespace_tokenize(text)  # 按空格切分
         split_tokens = []
         for token in orig_tokens:
             if self.do_lower_case and token not in self.never_split:
                 token = token.lower()
-                token = self._run_strip_accents(token)
+                token = self._run_strip_accents(token)  # 文本标准化，去符号（Mn）
             split_tokens.extend(self._run_split_on_punc(token))
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
@@ -233,17 +223,22 @@ class BasicTokenizer(object):
 
     def _run_strip_accents(self, text):
         """Strips accents from a piece of text."""
+        # 将unicode文本标准化，确保所有字符串在底层有相同的表示
+        # https://blog.csdn.net/weixin_43866211/article/details/98384017
         text = unicodedata.normalize("NFD", text)
         output = []
         for char in text:
             cat = unicodedata.category(char)
+            # 去除Mn Mark
             if cat == "Mn":
                 continue
             output.append(char)
         return "".join(output)
 
     def _run_split_on_punc(self, text):
-        """Splits punctuation on a piece of text."""
+        """将一个文本按标点符号划分为一个list
+        例如：“我和你，一起走” --> ["我和你","，","一起走"]
+        """
         if text in self.never_split:
             return [text]
         chars = list(text)
@@ -265,7 +260,7 @@ class BasicTokenizer(object):
         return ["".join(x) for x in output]
 
     def _tokenize_chinese_chars(self, text):
-        """Adds whitespace around any CJK character."""
+        """CJK字符 周围加空格"""
         output = []
         for char in text:
             cp = ord(char)
@@ -300,7 +295,7 @@ class BasicTokenizer(object):
         return False
 
     def _clean_text(self, text):
-        """Performs invalid character removal and whitespace cleanup on text."""
+        """去除一些无效的字符和空白符"""
         output = []
         for char in text:
             cp = ord(char)
@@ -370,9 +365,7 @@ class WordpieceTokenizer(object):
 
 
 def _is_whitespace(char):
-    """Checks whether `chars` is a whitespace character."""
-    # \t, \n, and \r are technically contorl characters but we treat them
-    # as whitespace since they are generally considered as such.
+    """检查是否为空白符 whitespace"""
     if char == " " or char == "\t" or char == "\n" or char == "\r":
         return True
     cat = unicodedata.category(char)
@@ -382,9 +375,7 @@ def _is_whitespace(char):
 
 
 def _is_control(char):
-    """Checks whether `chars` is a control character."""
-    # These are technically control characters but we count them as whitespace
-    # characters.
+    """检查是否为控制符，\t\n\r我们记作空白符"""
     if char == "\t" or char == "\n" or char == "\r":
         return False
     cat = unicodedata.category(char)
@@ -394,12 +385,8 @@ def _is_control(char):
 
 
 def _is_punctuation(char):
-    """Checks whether `chars` is a punctuation character."""
+    """检查是否是标点符号， 所有非字母和非数字的ASCII码都为标点符号，^ $ ` 等不在unicode符号类，但也看作标点符号"""
     cp = ord(char)
-    # We treat all non-letter/number ASCII as punctuation.
-    # Characters such as "^", "$", and "`" are not in the Unicode
-    # Punctuation class but we treat them as punctuation anyways, for
-    # consistency.
     if ((cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or
             (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126)):
         return True

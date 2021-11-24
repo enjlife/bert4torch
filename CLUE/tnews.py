@@ -3,8 +3,8 @@ import json
 import torch.nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, BertModel, Trainer, time_diff
-from reference.logger_configuration import get_logger, _get_library_root_logger
+from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff
+from reference.logger_configuration import _get_library_root_logger
 
 
 logger = _get_library_root_logger()
@@ -69,6 +69,7 @@ class Config(object):
         self.log_freq = 2000
         self.logger = logger
         self.save_path = 'trained_11-13.model'
+        self.with_drop = False  # 分类的全连接层前是否dropout
 
 
 class TNEWSTrainer(Trainer):
