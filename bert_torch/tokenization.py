@@ -76,19 +76,6 @@ class BertTokenizer(object):
 
     def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
                  never_split=("[UNK]", "[SEP]", "[PAD]", "[CLS]", "[MASK]")):
-        """Constructs a BertTokenizer.
-        Args:
-          vocab_file: Path to a one-wordpiece-per-line vocabulary file
-          do_lower_case: Whether to lower case the input
-                         Only has an effect when do_wordpiece_only=False
-          do_basic_tokenize: Whether to do basic tokenization before wordpiece.
-          max_len: An artificial maximum length to truncate tokenized sequences to;
-                         Effective maximum length is always the minimum of this
-                         value (if specified) and the underlying BERT model's
-                         sequence length.
-          never_split: List of tokens which will never be split during tokenization.
-                         Only has an effect when do_wordpiece_only=False
-        """
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
@@ -98,8 +85,7 @@ class BertTokenizer(object):
             [(ids, tok) for tok, ids in self.vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
-          self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case,
-                                                never_split=never_split)
+            self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case, never_split=never_split)
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
         self.max_len = max_len if max_len is not None else int(1e12)
 
@@ -216,7 +202,7 @@ class BasicTokenizer(object):
             if self.do_lower_case and token not in self.never_split:
                 token = token.lower()
                 token = self._run_strip_accents(token)  # 文本标准化，去符号（Mn）
-            split_tokens.extend(self._run_split_on_punc(token))
+            split_tokens.extend(self._run_split_on_punc(token))  # 按标点符号分割
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
@@ -317,19 +303,9 @@ class WordpieceTokenizer(object):
         self.max_input_chars_per_word = max_input_chars_per_word
 
     def tokenize(self, text):
-        """Tokenizes a piece of text into its word pieces.
-        This uses a greedy longest-match-first algorithm to perform tokenization
-        using the given vocabulary.
-        For example:
-          input = "unaffable"
-          output = ["un", "##aff", "##able"]
-        Args:
-          text: A single token or whitespace separated tokens. This should have
-            already been passed through `BasicTokenizer`.
-        Returns:
-          A list of wordpiece tokens.
+        """将一小段文本分成单词片段，采用最大匹配词表的方式
+        "unaffable" --> output = ["un", "##aff", "##able"]
         """
-
         output_tokens = []
         for token in whitespace_tokenize(text):
             chars = list(token)
@@ -343,6 +319,7 @@ class WordpieceTokenizer(object):
             while start < len(chars):
                 end = len(chars)
                 cur_substr = None
+                # end逐渐减1，直到匹配
                 while start < end:
                     substr = "".join(chars[start:end])
                     if start > 0:

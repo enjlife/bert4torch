@@ -18,7 +18,7 @@ class Trainer(object):
             self.model = nn.DataParallel(self.model, device_ids=config.cuda_devices)
         self.train_data = train_iter
         self.dev_data = dev_iter
-        # --------------------------------------------------------------------
+
         self.num_epochs = config.num_epochs
         param_optimizer = list(self.model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']

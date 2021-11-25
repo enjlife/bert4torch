@@ -38,6 +38,7 @@ except (AttributeError, ImportError):
     PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
                                               os.path.join(os.path.expanduser("~"), '.pytorch_pretrained_bert'))
 
+
 # 代码来自苏神的bert4keras https://github.com/bojone/bert4keras
 def sequence_padding(inputs, length=None, value=0, seq_dims=1, mode='post'):
     """Numpy函数，将序列padding到同一长度

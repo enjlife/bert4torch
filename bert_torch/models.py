@@ -323,20 +323,16 @@ class BertPreTrainedModel(nn.Module):
 class BertModel(BertPreTrainedModel):
     def __init__(self, config, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-        # embedding for BERT, sum of positional, segment, token embeddings
-        self.embeddings = BertEmbeddings(config)
-        # transformer encoder
+        self.embeddings = BertEmbeddings(config)  # sum of positional, segment, token embeddings
         self.encoder = BertEncoder(config)
         self.pooler = Pooler(config)  # if config.with_pool or config.with_nsp else None
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False):
-        # encoder masking for padded token
-        # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
-        # mask -> [batch_size, 1, 1, seq_len]
         if attention_mask is None:
-            attention_mask = (input_ids > 0).unsqueeze(1).unsqueeze(1)
+            # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
+            # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
+            attention_mask = (input_ids > 0).unsqueeze(1).unsqueeze(1)  # mask -> [batch_size, 1, 1, seq_len]
         else:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         if token_type_ids is None:
@@ -457,10 +453,8 @@ class BertForMaskedLM(BertPreTrainedModel):
 class BertForNextSentencePrediction(BertPreTrainedModel):
     """
     0 => next sentence is the continuation, 1 => next sentence is a random sentence.
-
     Example usage:
     ```python
-    # Already been converted into WordPiece token ids
     input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
     input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
     token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
