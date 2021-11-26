@@ -3,6 +3,7 @@ import collections
 import torch
 
 # This script is from `https://github.com/dbiir/UER-py.git`
+# 添加cpu load 权重 map_location=torch.device('cpu')
 
 
 def convert_bert_transformer_encoder_from_uer_to_huggingface(input_model, output_model, layers_num):
@@ -37,7 +38,7 @@ def main():
 
     args = parser.parse_args()
 
-    input_model = torch.load(args.input_model_path)
+    input_model = torch.load(args.input_model_path, map_location=torch.device('cpu'))
 
     output_model = collections.OrderedDict()
 

@@ -13,27 +13,16 @@ import transformers
 
 # bert = BertModel.from_pretrained('bert-base-chinese', **{'cache_dir': r'pretrained_model/bert-base-chinese'})
 
-from utils import get_logger
-
-logger = get_logger()
-
-
-logger.info('asc')
-logger.error('sss')
-print(__name__)
-# bert = build_transformer_model(
-#     config_path=config_path,
-#     checkpoint_path=checkpoint_path,
-#     return_keras_model=False,
-# )
-# bert.model.layers[-2].get_output_at(-1)
-import functools
+import tqdm
 import time
 
 
+l = range(100)
 
 
-
+for x in tqdm.tqdm(enumerate(l), desc='10 epoch', total=len(l), position=0, leave=False):
+    print(x)
+    time.sleep(0.3)
 
 
 

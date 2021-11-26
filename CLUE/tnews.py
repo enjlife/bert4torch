@@ -3,7 +3,7 @@ import json
 import torch.nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff
+from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff, sequence_padding
 from reference.logger_configuration import _get_library_root_logger
 
 
@@ -14,24 +14,17 @@ PAD, CLS, MASK, SEP = '[PAD]', '[CLS]', '[MASK]', '[SEP]'
 
 def load_dataset(path, max_len=128):
     D = []
-    sep_id = tokenizer.convert_tokens_to_ids([SEP])
     label2id = {label: i for i, label in enumerate(config.labels)}
-    with open(path, 'r', encoding='utf8') as f:
-        for line in tqdm(f):
-            d = json.loads(line)
-            sent, label = d['sentence'], d.get('label', '100')
-            tokens = tokenizer.tokenize(sent)
-            tokens = [CLS] + tokens
-            token_ids = tokenizer.convert_tokens_to_ids(tokens)
-            if len(token_ids) >= max_len:
-                mask = [1] * max_len
-                token_ids = token_ids[:max_len-1] + sep_id
-            else:
-                token_ids += sep_id
-                mask = [1] * len(token_ids) + [0] * (max_len - len(token_ids))
-                token_ids += ([0] * (max_len - len(token_ids)))
-            type_ids = [0] * max_len
-            D.append((token_ids, type_ids, mask, label2id[label]))
+    fr = open(path, 'r', encoding='utf8')
+    for line in tqdm(fr):
+        d = json.loads(line)
+        sent, label = d['sentence'], d.get('label', '100')
+        tokens = tokenizer.tokenize(sent)
+        tokens = [CLS] + tokens[:max_len-2] + [SEP]  # tokens最大为max_len-2
+        token_ids = tokenizer.convert_tokens_to_ids(tokens)
+        type_ids = [0] * len(token_ids)
+        D.append((token_ids, type_ids, label2id[label]))
+    fr.close()
     return D
 
 
@@ -40,11 +33,14 @@ class DataIterator(DatasetBase):
         super(DataIterator, self).__init__(data_list, batch_size, device, rand)
 
     def _to_tensor(self, datas):
-        token_ids = torch.LongTensor([data[0] for data in datas]).to(self.device)
-        type_ids = torch.LongTensor([data[1] for data in datas]).to(self.device)
-        mask = torch.ByteTensor([data[2] for data in datas]).to(self.device)
-        labels = torch.LongTensor([data[3] for data in datas]).to(self.device)
-        return token_ids, type_ids, mask, labels
+        token_ids = [data[0] for data in datas]
+        type_ids = [data[1] for data in datas]
+        token_ids = sequence_padding(token_ids)
+        type_ids = sequence_padding(type_ids)
+        token_ids = torch.LongTensor(token_ids).to(self.device)
+        type_ids = torch.LongTensor(type_ids).to(self.device)
+        labels = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        return token_ids, type_ids, labels
 
 
 class Config(object):
@@ -56,7 +52,7 @@ class Config(object):
         self.require_improvement = 100000  # early stopping: 1000 batches
         self.num_classes = len(self.labels)
         self.num_epochs = 40
-        self.batch_size = 8
+        self.batch_size = 16
         self.max_len = 128
         self.lr = 5e-4  # 5e-4
         self.scheduler = 'CONSTANT'  # 'CONSTANT_WITH_WARMUP'  学习率策略
@@ -65,18 +61,17 @@ class Config(object):
         self.weight_decay = 0.01
         self.with_cuda = True
         self.cuda_devices = None
-        self.num_warmup_steps = 0.1  # total_batch的一个比例
+        self.num_warmup_steps_ratio = 0.1  # total_batch的一个比例
         self.log_freq = 2000
-        self.logger = logger
-        self.save_path = 'trained_11-13.model'
+        self.save_path = 'trained.model'
         self.with_drop = False  # 分类的全连接层前是否dropout
 
 
 class TNEWSTrainer(Trainer):
-    def __init__(self, config, train_iter, dev_iter, model):
+    def __init__(self, config, model):
         self.data_path = config.data_path
         self.labels = config.labels
-        super(TNEWSTrainer, self).__init__(config, train_iter, dev_iter, model)
+        super(TNEWSTrainer, self).__init__(config, model)
 
     def train(self):
         start_time = time.time()
@@ -87,23 +82,24 @@ class TNEWSTrainer(Trainer):
         self.model.train()
         for epoch in range(self.num_epochs):
             logger.info('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-            data_iter = tqdm(enumerate(train_iter),
+            data_iter = tqdm(enumerate(self.train_data),
                              desc="EP_%s:%d" % ('train', epoch),
-                             total=len(train_iter),
+                             total=len(self.train_data),
                              bar_format="{l_bar}{r_bar}")
             for _, data in data_iter:
-                token_ids, type_ids, mask, labels = data
-                logits = self.model(token_ids, type_ids, mask)
+                token_ids, type_ids, labels = data
+                logits = self.model(token_ids, type_ids)
                 self.model.zero_grad()
                 loss = F.cross_entropy(logits, labels)
                 loss.backward()
-                self.optimizer.step()
+                if total_batch % 2 == 0:
+                    self.optimizer.step()
                 self.scheduler.step()
                 if total_batch % self.log_freq == 0:
                     dev_loss, dev_acc = self.dev()
                     if dev_loss < min_loss:
                         min_loss = dev_loss
-                        self.save(epoch)
+                        self.save_model(epoch)
                         improve = '*'
                         last_improve = total_batch
                     else:
@@ -112,8 +108,8 @@ class TNEWSTrainer(Trainer):
                     msg = 'Iter: {0:>6},  Train Loss: {1:>5.2},  Val Loss: {2:>5.2},  Val Acc: {3:>6.2%},  Time: {4} {5}'
                     logger.info(msg.format(total_batch, loss, dev_loss, dev_acc, t_dif, improve))
                 total_batch += 1
+                # early_stopping
                 if total_batch - last_improve > config.require_improvement:
-                    # 验证集loss超过1000batch没下降，结束训练
                     logger.info(f"No optimization for {config.require_improvement} batches, auto-stopping...")
                     flag = True
                     break
@@ -128,8 +124,8 @@ class TNEWSTrainer(Trainer):
         item_total = 0
         with torch.no_grad():
             for data in data_iter if data_iter else self.dev_data:
-                token_ids, type_ids, mask, labels = data
-                logits = model(token_ids, type_ids, mask)
+                token_ids, type_ids, labels = data
+                logits = model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
                 item_total += torch.numel(labels)
@@ -144,8 +140,8 @@ class TNEWSTrainer(Trainer):
         res = []
         with torch.no_grad():
             for data in test_iter:
-                token_ids, type_ids, mask, labels = data
-                logits = self.model(token_ids, type_ids, mask)
+                token_ids, type_ids, labels = data
+                logits = self.model(token_ids, type_ids)
                 logits = logits.argmax(axis=1)
                 logits = logits.cpu().numpy().tolist()
                 res.extend(logits)
@@ -163,12 +159,12 @@ if __name__ == '__main__':
     # data
     train_data = load_dataset(config.data_path + 'train.json')
     dev_data = load_dataset(config.data_path + 'dev.json')
-    train_iter = DataIterator(train_data, config.batch_size, config.device)
-    dev_iter = DataIterator(dev_data, config.batch_size, config.device)
+    config.train_iter = DataIterator(train_data, config.batch_size, config.device)
+    config.dev_iter = DataIterator(dev_data, config.batch_size, config.device)
 
     model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
     # model.load_state_dict(torch.load('trained2.model'))
-    trainer = TNEWSTrainer(config, train_iter, dev_iter, model)
+    trainer = TNEWSTrainer(config, model)
     trainer.train()
     # loss, acc = trainer.dev()
     # print('loss: %f, acc: %f' % (loss, acc))
