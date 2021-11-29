@@ -76,11 +76,11 @@ class Config(object):
         self.save_path = 'trained.model'
 
 
-class TNEWSTrainer(Trainer):
-    def __init__(self, config, train_iter, dev_iter, model):
+class CLSTrainer(Trainer):
+    def __init__(self, config, model):
         self.data_path = config.data_path
         self.labels = config.labels
-        super(TNEWSTrainer, self).__init__(config, train_iter, dev_iter, model)
+        super(CLSTrainer, self).__init__(config, model)
 
     def test(self, data_iters, labels):
         self.model.eval()
@@ -106,6 +106,6 @@ if __name__ == '__main__':
     test_iters = [DataIterator(data, config.batch_size, config.device) for data in test_data]
 
     model = BertForNextSentencePrediction.from_pretrained(config.pretrained_path)
-    trainer = TNEWSTrainer(config, [], [], model)
+    trainer = CLSTrainer(config, model)
     trainer.test(test_iters, labels)
 

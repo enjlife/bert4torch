@@ -61,7 +61,8 @@ class BertConfig(object):
                  num_qkv=0,
                  seg_emb=False,
                  with_unilm=False,
-                 last_fn='tanh'
+                 last_fn='tanh',
+                 with_drop=False,
                  ):
         """Constructs BertConfig.
 
@@ -92,6 +93,7 @@ class BertConfig(object):
                 self.__dict__[key] = value
             self.with_unilm = with_unilm
             self.last_fn = last_fn
+            self.with_drop = with_drop
 
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
@@ -117,6 +119,7 @@ class BertConfig(object):
             self.seg_emb = seg_emb
             self.with_unilm = with_unilm
             self.last_fn = last_fn
+            self.with_drop = with_drop
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")

@@ -10,7 +10,7 @@
 ### 常用预训练模型下载链接
 | 来源 | 模型 | 模型参数 |下载地址 | 
 | ---- | ---- | ---- | ---- |
-|None|bert-base-chinese pytorch版本 | 12-layer, 768-hidden, 12-heads, 110M parameters | https://huggingface.co/bert-base-chinese  |
+|未知|bert-base-chinese pytorch版本 | 12-layer, 768-hidden, 12-heads, 110M parameters | https://huggingface.co/bert-base-chinese  |
 |[HFL](https://github.com/ymcui/Chinese-BERT-wwm)| chinese-bert-wwm-ext pytorch版本 | 12-layer, 768-hidden, 12-heads, 110M parameters |https://huggingface.co/hfl/chinese-bert-wwm-ext/tree/main
 |                                               |Roberta-wwm-ext-base pytorch版本 | 12-layer, 768-hidden, 12-heads, 110M parameters | https://huggingface.co/hfl/chinese-roberta-wwm-ext/tree/main |
 |[UER](https://github.com/dbiir/UER-py) | mixed_corpus_bert_basepytorch版本 需要使用reference的转换脚本转一下layer名称 | 12-layer, 768-hidden, 12-heads, 110M parameters | https://share.weiyun.com/5QOzPqq |
@@ -33,7 +33,7 @@
 |Roberta-wwm-ext-base| 82.14% | 80.96% |74.34% | 76.44% | 74.99% | 78.98% |
 
 ### NSP-BERT
-思路来自[NSP-BERT](https://github.com/sunyilgdx/NSP-BERT/)，复现了电商评论数据集eprstmt（zero-shot）的效果，测试集最高准确率约为86.8%。  
+思路来自[NSP-BERT](https://github.com/sunyilgdx/NSP-BERT/) ，复现了电商评论数据集eprstmt（zero-shot）的效果，测试集最高准确率约为86.8%。  
 
 | 模型 | 准确率 | 
 | ----| ---- |

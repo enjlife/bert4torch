@@ -3,7 +3,7 @@ import json
 import torch.nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff, sequence_padding
+from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff, sequence_padding, set_seed
 from reference.logger_configuration import _get_library_root_logger
 
 
@@ -51,18 +51,19 @@ class Config(object):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
         self.require_improvement = 100000  # early stopping: 1000 batches
         self.num_classes = len(self.labels)
-        self.num_epochs = 40
+        self.num_epochs = 3
         self.batch_size = 16
         self.max_len = 128
-        self.lr = 5e-4  # 5e-4
-        self.scheduler = 'CONSTANT'  # 'CONSTANT_WITH_WARMUP'  学习率策略
+        self.lr = 2e-5  # 5e-4
+        self.scheduler = 'CONSTANT_WITH_WARMUP'  # 'CONSTANT'  # 'CONSTANT_WITH_WARMUP'  学习率策略
+        self.max_grad_norm = 1.0  # 梯度裁剪
         self.pretrained_path = '../pretrained_model/bert-base-chinese'
         self.betas = (0.9, 0.999)
         self.weight_decay = 0.01
         self.with_cuda = True
         self.cuda_devices = None
         self.num_warmup_steps_ratio = 0.1  # total_batch的一个比例
-        self.log_freq = 2000
+        self.log_freq = 1000
         self.save_path = 'trained.model'
         self.with_drop = False  # 分类的全连接层前是否dropout
 
@@ -89,11 +90,12 @@ class TNEWSTrainer(Trainer):
             for _, data in data_iter:
                 token_ids, type_ids, labels = data
                 logits = self.model(token_ids, type_ids)
-                self.model.zero_grad()
                 loss = F.cross_entropy(logits, labels)
                 loss.backward()
-                if total_batch % 2 == 0:
-                    self.optimizer.step()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+                # if total_batch % 2 == 0:
+                self.optimizer.step()
+                self.model.zero_grad()
                 self.scheduler.step()
                 if total_batch % self.log_freq == 0:
                     dev_loss, dev_acc = self.dev()
@@ -125,7 +127,7 @@ class TNEWSTrainer(Trainer):
         with torch.no_grad():
             for data in data_iter if data_iter else self.dev_data:
                 token_ids, type_ids, labels = data
-                logits = model(token_ids, type_ids)
+                logits = self.model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
                 item_total += torch.numel(labels)
@@ -162,9 +164,10 @@ if __name__ == '__main__':
     config.train_iter = DataIterator(train_data, config.batch_size, config.device)
     config.dev_iter = DataIterator(dev_data, config.batch_size, config.device)
 
-    model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
+    set_seed(42)
+    cls_model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
     # model.load_state_dict(torch.load('trained2.model'))
-    trainer = TNEWSTrainer(config, model)
+    trainer = TNEWSTrainer(config, cls_model)
     trainer.train()
     # loss, acc = trainer.dev()
     # print('loss: %f, acc: %f' % (loss, acc))

@@ -28,6 +28,7 @@ class Trainer(object):
         self.optimizer = Adam(optimizer_grouped_parameters, lr=config.lr, betas=config.betas)
         num_warmup_steps = self.num_epochs * len(self.train_data) * config.num_warmup_steps_ratio
         self.scheduler = get_scheduler(config.scheduler, self.optimizer, num_warmup_steps)
+        self.max_grad_norm = config.max_grad_norm
         self.save_path = config.save_path if hasattr(config, 'save_path') else 'trained.model'
         self.log_freq = config.log_freq
         logger.info("Total Parameters: %d" % sum([p.nelement() for p in self.model.parameters()]))
