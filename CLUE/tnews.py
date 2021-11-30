@@ -3,16 +3,15 @@ import json
 import torch.nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff, sequence_padding, set_seed
-from reference.logger_configuration import _get_library_root_logger
+from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff, \
+    sequence_padding, set_seed, get_logger
 
 
-logger = _get_library_root_logger()
-
-PAD, CLS, MASK, SEP = '[PAD]', '[CLS]', '[MASK]', '[SEP]'
+logger = get_logger()
 
 
 def load_dataset(path, max_len=128):
+    PAD, CLS, MASK, SEP = '[PAD]', '[CLS]', '[MASK]', '[SEP]'
     D = []
     label2id = {label: i for i, label in enumerate(config.labels)}
     fr = open(path, 'r', encoding='utf8')
@@ -29,6 +28,7 @@ def load_dataset(path, max_len=128):
 
 
 class DataIterator(DatasetBase):
+
     def __init__(self, data_list, batch_size, device, rand=False):
         super(DataIterator, self).__init__(data_list, batch_size, device, rand)
 
@@ -46,18 +46,19 @@ class DataIterator(DatasetBase):
 class Config(object):
     """配置训练参数"""
     def __init__(self):
+        self.pretrained_path = '../pretrained_model/bert-base-chinese'
         self.data_path = '../data/tnews/'  # train.json, valid.json, test.json
         self.labels = ['100', '101', '102', '103', '104', '106', '107', '108', '109', '110', '112', '113', '114', '115', '116']  # 类别名单
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
-        self.require_improvement = 100000  # early stopping: 1000 batches
+        self.require_improvement = 10000  # early stopping: 1000 batches
         self.num_classes = len(self.labels)
         self.num_epochs = 3
         self.batch_size = 16
         self.max_len = 128
         self.lr = 2e-5  # 5e-4
-        self.scheduler = 'CONSTANT_WITH_WARMUP'  # 'CONSTANT'  # 'CONSTANT_WITH_WARMUP'  学习率策略
+        self.scheduler = 'CONSTANT_WITH_WARMUP'  # 学习率策略'CONSTANT','CONSTANT_WITH_WARMUP'
         self.max_grad_norm = 1.0  # 梯度裁剪
-        self.pretrained_path = '../pretrained_model/bert-base-chinese'
+        self.gradient_accumulation_steps = 1
         self.betas = (0.9, 0.999)
         self.weight_decay = 0.01
         self.with_cuda = True
@@ -76,42 +77,41 @@ class TNEWSTrainer(Trainer):
 
     def train(self):
         start_time = time.time()
-        total_batch = 0
+        step = 0
         min_loss = float('inf')
         last_improve = 0
         flag = False  # 用于early-stop
         self.model.train()
+        self.model.zero_grad()
         for epoch in range(self.num_epochs):
             logger.info('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-            data_iter = tqdm(enumerate(self.train_data),
-                             desc="EP_%s:%d" % ('train', epoch),
-                             total=len(self.train_data),
-                             bar_format="{l_bar}{r_bar}")
-            for _, data in data_iter:
-                token_ids, type_ids, labels = data
+            data_iter = tqdm(self.train_data, desc="EP_%s:%d" % ('train', epoch))  # bar_format="{l_bar}{r_bar}"
+            for (token_ids, type_ids, labels) in data_iter:
                 logits = self.model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
+                if self.gradient_accumulation_steps > 1:
+                    loss = loss / self.gradient_accumulation_steps
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-                # if total_batch % 2 == 0:
-                self.optimizer.step()
-                self.model.zero_grad()
-                self.scheduler.step()
-                if total_batch % self.log_freq == 0:
+                if (step + 1) % self.gradient_accumulation_steps == 0:
+                    self.optimizer.step()
+                    self.model.zero_grad()
+                    self.scheduler.step()
+                if step % self.log_freq == 0:
                     dev_loss, dev_acc = self.dev()
                     if dev_loss < min_loss:
                         min_loss = dev_loss
                         self.save_model(epoch)
                         improve = '*'
-                        last_improve = total_batch
+                        last_improve = step
                     else:
                         improve = ''
                     t_dif = time_diff(start_time)
                     msg = 'Iter: {0:>6},  Train Loss: {1:>5.2},  Val Loss: {2:>5.2},  Val Acc: {3:>6.2%},  Time: {4} {5}'
-                    logger.info(msg.format(total_batch, loss, dev_loss, dev_acc, t_dif, improve))
-                total_batch += 1
+                    logger.info(msg.format(step, loss, dev_loss, dev_acc, t_dif, improve))
+                step += 1
                 # early_stopping
-                if total_batch - last_improve > config.require_improvement:
+                if step - last_improve > config.require_improvement:
                     logger.info(f"No optimization for {config.require_improvement} batches, auto-stopping...")
                     flag = True
                     break
@@ -125,8 +125,7 @@ class TNEWSTrainer(Trainer):
         acc_total = 0
         item_total = 0
         with torch.no_grad():
-            for data in data_iter if data_iter else self.dev_data:
-                token_ids, type_ids, labels = data
+            for (token_ids, type_ids, labels) in data_iter if data_iter else self.dev_data:
                 logits = self.model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
@@ -136,13 +135,13 @@ class TNEWSTrainer(Trainer):
         return loss_total/len(dev_data), acc_total/item_total
 
     def test(self):
+        self.model.load_state_dict(torch.load(self.save_path))
         self.model.eval()
         test_data = load_dataset(self.data_path + 'test.json')
         test_iter = DataIterator(test_data, config.batch_size, config.device)
         res = []
         with torch.no_grad():
-            for data in test_iter:
-                token_ids, type_ids, labels = data
+            for (token_ids, type_ids, labels) in test_iter:
                 logits = self.model(token_ids, type_ids)
                 logits = logits.argmax(axis=1)
                 logits = logits.cpu().numpy().tolist()

@@ -13,17 +13,10 @@ import transformers
 
 # bert = BertModel.from_pretrained('bert-base-chinese', **{'cache_dir': r'pretrained_model/bert-base-chinese'})
 
-import tqdm
-import time
+from bert4keras import optimizers
 
 
-l = range(100)
-
-
-for x in tqdm.tqdm(enumerate(l), desc='10 epoch', total=len(l), position=0, leave=False):
-    print(x)
-    time.sleep(0.3)
-
+from tensorflow import optimizers
 
 
 

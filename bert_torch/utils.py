@@ -19,10 +19,8 @@ import requests
 import time
 from datetime import timedelta
 from botocore.exceptions import ClientError
-from reference.local_logging import get_logger
-# from dataclasses import dataclass
-
-logger = get_logger()
+import logging
+import threading
 
 try:
     from urllib.parse import urlparse
@@ -37,6 +35,32 @@ try:
 except (AttributeError, ImportError):
     PYTORCH_PRETRAINED_BERT_CACHE = os.getenv('PYTORCH_PRETRAINED_BERT_CACHE',
                                               os.path.join(os.path.expanduser("~"), '.pytorch_pretrained_bert'))
+_lock = threading.Lock()
+_default_logger = None  # 默认的logger
+logger = logging.getLogger()
+
+
+def get_logger(name=None, log_file=None, log_level=logging.INFO):
+    """返回唯一的logger，支持console和文件"""
+    log_format = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+                                   datefmt='%m/%d/%Y %H:%M:%S')
+    if name is None:
+        name = __name__.split(".")[0]
+    global _default_logger
+
+    with _lock:
+        if _default_logger:
+            return _default_logger
+        _default_logger = logging.getLogger(name)
+        _default_logger.setLevel(log_level)
+        console_handler = logging.StreamHandler()  # Set sys.stderr as stream.
+        console_handler.flush = sys.stderr.flush
+        console_handler.setFormatter(log_format)
+        _default_logger.addHandler(console_handler)
+        if log_file:
+            file_handler = logging.FileHandler(log_file)
+            _default_logger.addHandler(file_handler)
+    return _default_logger
 
 
 # 代码来自苏神的bert4keras https://github.com/bojone/bert4keras
@@ -111,8 +135,7 @@ else:
 
 act2fn = {'relu': nn.functional.relu, 'sigmoid': torch.sigmoid, 'gelu': gelu}
 
-# ------------------------------------------------
-# load_weight
+
 """
 Utilities for working with the local dataset cache.
 This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp

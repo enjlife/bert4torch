@@ -1,4 +1,5 @@
 output/
+.model
 *.bin
 .DS_Store
 .idea/

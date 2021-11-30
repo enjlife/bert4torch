@@ -202,6 +202,7 @@ class Train:
                 rec_total += rec
                 n += 1
         return loss_total/n, acc_total/n, rec_total/n
+
     # 重写了准确率计算的函数，有bug待修复
     def cal_acc(self, y_pre, y_true, mask):
         n = len(y_pre)
