@@ -36,20 +36,20 @@ logger = get_logger(__name__)
 
 
 class BertConfig(object):
-    """Configuration class to store the configuration of a `BertModel`. Usually used in from_pretrained.
+    """bert的config配置类
     """
     def __init__(self,
-                 vocab_size_or_config_json_file,
+                 vocab_size_or_config_json_file,  # config文件
                  pad_token_id=0,
-                 hidden_size=768,
-                 num_hidden_layers=12,
-                 num_attention_heads=12,
-                 intermediate_size=3072,
-                 hidden_act="gelu",
-                 hidden_dropout_prob=0.1,
-                 attention_probs_dropout_prob=0.1,
+                 hidden_size=768,  # 隐藏层大小 encoder,pooler
+                 num_hidden_layers=12,  # 隐藏层layer的层数
+                 num_attention_heads=12,  # attention头数
+                 intermediate_size=3072,  # intermediate的size
+                 hidden_act="gelu",  # encoder,pooler的激活函数
+                 hidden_dropout_prob=0.1,  # embeddings,encoder,pooler的全连接层drop比例
+                 attention_probs_dropout_prob=0.1,  # encoder的drop比例
                  layer_norm_eps=1e-12,
-                 max_position_embeddings=512,
+                 max_position_embeddings=512,  # 输入的最大长度
                  type_vocab_size=2,  # 输入的文本段落数
                  relax_projection=0,
                  new_pos_ids=False,
@@ -62,35 +62,16 @@ class BertConfig(object):
                  seg_emb=False,
                  with_unilm=False,
                  last_fn='tanh',
-                 with_drop=False,
+                 with_drop=False,  # 文本分类最后是否添加dropout
                  ):
         """Constructs BertConfig.
-
-        Args:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `BertModel`.
-            hidden_size: Size of the encoder layers and the pooler layer.
-            num_hidden_layers: Number of hidden layers in the Transformer encoder.
-            num_attention_heads: Number of encoder heads for each encoder layer in
-                the Transformer encoder.
-            intermediate_size: The size of the "intermediate" (i.e., feed-forward)
-                layer in the Transformer encoder.
-            hidden_act: The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported.
-            hidden_dropout_prob: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob: The dropout ratio for the encoder
-                probabilities.
-            max_position_embeddings: The maximum sequence length that this model might
-                ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048).
-            type_vocab_size: The vocabulary size of the `token_type_ids` passed into
-                `BertModel`.
         """
         if isinstance(vocab_size_or_config_json_file, str):
             with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
                 json_config = json.loads(reader.read())
             for key, value in json_config.items():
                 self.__dict__[key] = value
+            # 除了config文件, 补充的参数如下
             self.with_unilm = with_unilm
             self.last_fn = last_fn
             self.with_drop = with_drop
@@ -117,6 +98,7 @@ class BertConfig(object):
             self.label_smoothing = label_smoothing
             self.num_qkv = num_qkv
             self.seg_emb = seg_emb
+            # 补充的参数
             self.with_unilm = with_unilm
             self.last_fn = last_fn
             self.with_drop = with_drop

@@ -1,23 +1,20 @@
 import sys
-import time
 import json
 import numpy as np
 import torch.nn
 from tqdm import tqdm
 sys.path.append('../')
-from bert_torch import DatasetBase, BertTokenizer, BertForNextSentencePrediction, Trainer, time_diff, sequence_padding
-from reference.logger_configuration import _get_library_root_logger
+from bert_torch import DatasetBase, BertTokenizer, BertForNextSentencePrediction, Trainer, sequence_padding, get_logger
 from sklearn import metrics
 
 """Zero-shot eprstmt电商评论数据集分类 测试集acc：86.8%
 """
-logger = _get_library_root_logger()
-
-PAD, CLS, MASK, SEP = '[PAD]', '[CLS]', '[MASK]', '[SEP]'
+logger = get_logger()
 
 
 def load_dataset(path, patterns, max_len=256):
     """返回与模板数量相同的数据集"""
+    PAD, CLS, MASK, SEP = '[PAD]', '[CLS]', '[MASK]', '[SEP]'
     D = [[] for _ in patterns]
     labels = []
     patterns = [tokenizer.tokenize(p) for p in patterns]
@@ -39,16 +36,16 @@ def load_dataset(path, patterns, max_len=256):
 
 
 class DataIterator(DatasetBase):
-    def __init__(self, data_list, batch_size, device, rand=False):
-        super(DataIterator, self).__init__(data_list, batch_size, device, rand)
+    def __init__(self, data_list, batch_size, rand=False):
+        super(DataIterator, self).__init__(data_list, batch_size, rand)
 
     def _to_tensor(self, datas):
         token_ids = [data[0] for data in datas]
         seg_ids = [data[1] for data in datas]
         token_ids = sequence_padding(token_ids)
         seg_ids = sequence_padding(seg_ids)
-        token_ids = torch.LongTensor(token_ids).to(self.device)
-        seg_ids = torch.LongTensor(seg_ids).to(self.device)
+        token_ids = torch.LongTensor(token_ids)
+        seg_ids = torch.LongTensor(seg_ids)
         return token_ids, seg_ids
 
 
@@ -88,6 +85,7 @@ class CLSTrainer(Trainer):
         with torch.no_grad():
             for i, data_iter in enumerate(data_iters):
                 for (token_ids, seg_ids) in data_iter:
+                    token_ids, seg_ids = token_ids.to(self.device), seg_ids.to(self.device)
                     logits = self.model(token_ids, seg_ids).cpu().numpy()
                     y_preds[i].extend(logits[:, 0].tolist())
         y_preds = np.argmax(y_preds, axis=0)
@@ -100,10 +98,10 @@ class CLSTrainer(Trainer):
 if __name__ == '__main__':
     config = Config()
     tokenizer = BertTokenizer.from_pretrained(config.pretrained_path)  # dir is OK
-    # data
+    # 计算pattern1和pattern2的softmax分数, 接argmax
     patterns = ['这次买的东西很好', '这次买的东西很差']
     test_data, labels = load_dataset(config.data_path + 'test_public.json', patterns)
-    test_iters = [DataIterator(data, config.batch_size, config.device) for data in test_data]
+    test_iters = [DataIterator(data, config.batch_size) for data in test_data]
 
     model = BertForNextSentencePrediction.from_pretrained(config.pretrained_path)
     trainer = CLSTrainer(config, model)

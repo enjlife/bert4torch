@@ -6,8 +6,7 @@ import time
 import numpy as np
 import torch
 from train_eval import train, test
-from bert_pytorch import BertConfig, BertForMaskedLM, BertTokenizer
-from importlib import import_module
+from bert_torch import BertConfig, BertForMaskedLM, BertTokenizer, set_seed, get_logger
 import argparse
 from utils import build_dataset, build_iterator, get_time_dif
 
@@ -49,11 +48,7 @@ class Config(object):
 
 
 if __name__ == '__main__':
-    # x = import_module('models.' + model_name)
-    np.random.seed(1)
-    torch.manual_seed(1)
-    torch.cuda.manual_seed_all(1)
-    torch.backends.cudnn.deterministic = True  # 保证每次结果一样
+    set_seed(1)
     config = Config(args)
     print(f'using device:{config.device}')
     start_time = time.time()

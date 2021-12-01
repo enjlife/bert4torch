@@ -34,13 +34,13 @@ class Trainer(object):
         self.log_freq = config.log_freq
         logger.info("Total Parameters: %d" % sum([p.nelement() for p in self.model.parameters()]))
 
-    def train(self):
+    def train(self, *args, **kwargs):
         raise NotImplementedError
 
-    def dev(self):
+    def dev(self, *args, **kwargs):
         raise NotImplementedError
 
-    def test(self):
+    def test(self, *args, **kwargs):
         raise NotImplementedError
 
     def save_model(self, epoch, best=True):

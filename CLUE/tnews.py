@@ -4,7 +4,7 @@ import torch.nn
 import torch.nn.functional as F
 from tqdm import tqdm
 from bert_torch import DatasetBase, BertTokenizer, BertForSequenceClassification, Trainer, time_diff, \
-    sequence_padding, set_seed, get_logger
+                        sequence_padding, set_seed, get_logger
 
 
 logger = get_logger()
@@ -29,17 +29,17 @@ def load_dataset(path, max_len=128):
 
 class DataIterator(DatasetBase):
 
-    def __init__(self, data_list, batch_size, device, rand=False):
-        super(DataIterator, self).__init__(data_list, batch_size, device, rand)
+    def __init__(self, data_list, batch_size, rand=False):
+        super(DataIterator, self).__init__(data_list, batch_size, rand)
 
     def _to_tensor(self, datas):
         token_ids = [data[0] for data in datas]
         type_ids = [data[1] for data in datas]
         token_ids = sequence_padding(token_ids)
         type_ids = sequence_padding(type_ids)
-        token_ids = torch.LongTensor(token_ids).to(self.device)
-        type_ids = torch.LongTensor(type_ids).to(self.device)
-        labels = torch.LongTensor([data[2] for data in datas]).to(self.device)
+        token_ids = torch.LongTensor(token_ids)
+        type_ids = torch.LongTensor(type_ids)
+        labels = torch.LongTensor([data[2] for data in datas])
         return token_ids, type_ids, labels
 
 
@@ -87,6 +87,7 @@ class TNEWSTrainer(Trainer):
             logger.info('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
             data_iter = tqdm(self.train_data, desc="EP_%s:%d" % ('train', epoch))  # bar_format="{l_bar}{r_bar}"
             for (token_ids, type_ids, labels) in data_iter:
+                token_ids, type_ids, labels = token_ids.to(self.device), type_ids.to(self.device), labels.to(self.device)
                 logits = self.model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
                 if self.gradient_accumulation_steps > 1:
@@ -138,7 +139,7 @@ class TNEWSTrainer(Trainer):
         self.model.load_state_dict(torch.load(self.save_path))
         self.model.eval()
         test_data = load_dataset(self.data_path + 'test.json')
-        test_iter = DataIterator(test_data, config.batch_size, config.device)
+        test_iter = DataIterator(test_data, config.batch_size)
         res = []
         with torch.no_grad():
             for (token_ids, type_ids, labels) in test_iter:
@@ -160,8 +161,8 @@ if __name__ == '__main__':
     # data
     train_data = load_dataset(config.data_path + 'train.json')
     dev_data = load_dataset(config.data_path + 'dev.json')
-    config.train_iter = DataIterator(train_data, config.batch_size, config.device)
-    config.dev_iter = DataIterator(dev_data, config.batch_size, config.device)
+    config.train_iter = DataIterator(train_data, config.batch_size)
+    config.dev_iter = DataIterator(dev_data, config.batch_size)
 
     set_seed(42)
     cls_model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)

@@ -5,7 +5,7 @@ import random
 
 
 class DatasetBase(object):
-    def __init__(self, data_list, batch_size, device, rand=False):
+    def __init__(self, data_list, batch_size, rand=False):
         self.batch_size = batch_size
         self.data_list = data_list
         self.n_batches = len(data_list) // batch_size
@@ -13,7 +13,6 @@ class DatasetBase(object):
         if len(data_list) % self.n_batches != 0:
             self.residue = True
         self.index = 0
-        self.device = device
         self.rand = rand  # 控制每次数据是否shuffle
 
     def _to_tensor(self, datas):

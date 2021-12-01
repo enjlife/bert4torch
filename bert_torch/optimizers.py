@@ -197,17 +197,10 @@ class AdamW(Optimizer):
                     bias_correction2 = 1.0 - beta2 ** state['step']
                     # 学习率 * sqrt(1.0 - beta2^step) / (1.0 - beta1^step)
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
-
+                # theta_t - lr * m_t / v_t
                 p.data.addcdiv_(-step_size, exp_avg, denom)
-
-                # Just adding the square of the weights to the loss function is *not*
-                # the correct way of using L2 regularization/weight decay with Adam,
-                # since that will interact with the m and v parameters in strange ways.
-                #
-                # Instead we want to decay the weights in a manner that doesn't interact
-                # with the m/v parameters. This is equivalent to adding the square
-                # of the weights to the loss with plain (non-momentum) SGD.
-                # Add weight decay at the end (fixed version)
+                # 将权重的平方加到loss对于Adam优化器并不合理，因为L2正则会与动量m和二阶矩v 产生交互
+                # 在更新梯度最后添加权重衰减，与没有动量的SGD等效
                 if group['weight_decay'] > 0.0:
                     p.data.add_(-group['lr'] * group['weight_decay'], p.data)
 
