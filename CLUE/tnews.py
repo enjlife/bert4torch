@@ -65,7 +65,7 @@ class Config(object):
         self.cuda_devices = None
         self.num_warmup_steps_ratio = 0.1  # total_batch的一个比例
         self.log_freq = 1000
-        self.save_path = 'trained.model'
+        self.save_path = 'trained_adam.model'
         self.with_drop = False  # 分类的全连接层前是否dropout
 
 
@@ -171,5 +171,5 @@ if __name__ == '__main__':
     trainer.train()
     # loss, acc = trainer.dev()
     # print('loss: %f, acc: %f' % (loss, acc))
-    trainer.test()
+    # trainer.test()
 
