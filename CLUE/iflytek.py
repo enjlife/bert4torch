@@ -51,20 +51,20 @@ class Config(object):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
         self.require_improvement = 10000  # early stopping: 1000 batches
         self.num_classes = 119
-        self.num_epochs = 3
+        self.num_epochs = 4
         self.num_batches = 0
         self.batch_size = 16
         self.max_len = 128
         self.lr = 2e-5  # 5e-4
         self.scheduler = 'CONSTANT_WITH_WARMUP'  # 学习率策略'CONSTANT','CONSTANT_WITH_WARMUP'
         self.max_grad_norm = 1.0  # 梯度裁剪
-        self.gradient_accumulation_steps = 1
+        self.gradient_accumulation_steps = 2
         self.betas = (0.9, 0.999)
         self.weight_decay = 0.01
         self.with_cuda = True
         self.cuda_devices = None
         self.num_warmup_steps_ratio = 0.1  # total_batch的一个比例
-        self.log_freq = 1000
+        self.log_freq = 770
         self.save_path = 'trained_iflytek.model'
         self.with_drop = False  # 分类的全连接层前是否dropout
 
@@ -72,7 +72,8 @@ class Config(object):
 class IFLYTEKTrainer(Trainer):
     def __init__(self, config, model):
         self.data_path = config.data_path
-        self.labels = config.labels
+        self.num_classes = config.num_classes
+
         super(IFLYTEKTrainer, self).__init__(config, model)
 
     def train(self, train_iter=None, dev_iter=None):
@@ -89,7 +90,7 @@ class IFLYTEKTrainer(Trainer):
             for (token_ids, type_ids, labels) in data_iter:
                 token_ids, type_ids, labels = token_ids.to(self.device), type_ids.to(self.device), labels.to(self.device)
                 logits = self.model(token_ids, type_ids)
-                loss = F.cross_entropy(logits, labels)
+                loss = F.cross_entropy(logits.view(-1, self.num_classes), labels.view(-1))
                 if self.gradient_accumulation_steps > 1:
                     loss = loss / self.gradient_accumulation_steps
                 loss.backward()
@@ -127,8 +128,10 @@ class IFLYTEKTrainer(Trainer):
         item_total = 0
         with torch.no_grad():
             for (token_ids, type_ids, labels) in dev_iter:
+                token_ids, type_ids, labels = token_ids.to(self.device), type_ids.to(self.device), labels.to(
+                    self.device)
                 logits = self.model(token_ids, type_ids)
-                loss = F.cross_entropy(logits, labels)
+                loss = F.cross_entropy(logits.view(-1, self.num_classes), labels.view(-1))
                 loss_total += loss.item()
                 item_total += torch.numel(labels)
                 acc_total += torch.sum(logits.argmax(axis=1).eq(labels)).item()
@@ -142,14 +145,15 @@ class IFLYTEKTrainer(Trainer):
         test_iter = DataIterator(test_data, config.batch_size)
         res = []
         with torch.no_grad():
-            for (token_ids, type_ids, labels) in test_iter:
+            for (token_ids, type_ids, _) in test_iter:
+                token_ids, type_ids = token_ids.to(self.device), type_ids.to(self.device)
                 logits = self.model(token_ids, type_ids)
                 logits = logits.argmax(axis=1)
                 logits = logits.cpu().numpy().tolist()
                 res.extend(logits)
-        fw = open(self.data_path + 'tnews_predict.json', 'w')
+        fw = open(self.data_path + 'iflytek_predict.json', 'w')
         for i, r in enumerate(res):
-            l = json.dumps({'id': str(i), 'label': self.labels[r]})
+            l = json.dumps({'id': str(i), 'label': str(r)})
             fw.write(l + '\n')
         fw.close()
         self.model.train()
@@ -169,7 +173,8 @@ if __name__ == '__main__':
     cls_model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
     # model.load_state_dict(torch.load('trained2.model'))
     trainer = IFLYTEKTrainer(config, cls_model)
-    trainer.train()
+    trainer.train(train_iter, dev_iter)
+    trainer.test()
     # loss, acc = trainer.dev()
     # print('loss: %f, acc: %f' % (loss, acc))
     # trainer.test()

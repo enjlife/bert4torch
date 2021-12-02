@@ -1,4 +1,5 @@
 # bert4torch
+bert的pytorch实现，以及很多样例。
 
 ## 模型下载
 ### Hugging Face bert-base-chinese
@@ -14,6 +15,17 @@
 |[HFL](https://github.com/ymcui/Chinese-BERT-wwm)| chinese-bert-wwm-ext pytorch版本 | 12-layer, 768-hidden, 12-heads, 110M parameters |https://huggingface.co/hfl/chinese-bert-wwm-ext/tree/main
 |                                               |Roberta-wwm-ext-base pytorch版本 | 12-layer, 768-hidden, 12-heads, 110M parameters | https://huggingface.co/hfl/chinese-roberta-wwm-ext/tree/main |
 |[UER](https://github.com/dbiir/UER-py) | mixed_corpus_bert_basepytorch版本 需要使用reference的转换脚本转一下layer名称 | 12-layer, 768-hidden, 12-heads, 110M parameters | https://share.weiyun.com/5QOzPqq |
+
+## CLUE
+### tnews
+| 模型 | 验证集 | 测试集 | 训练参数 |
+|---- | ---- | ---- | ---- |
+bert-base-chinese | - | - | batch_size:16, lr:2e-5, AdamW | 
+
+### iflytek
+| 模型 | 验证集 | 测试集 | 训练参数 |
+|---- | ---- | ---- | ---- |
+bert-base-chinese | - | - | batch_size:16, lr:2e-5, AdamW | 
 
 
 ## 文本分类
