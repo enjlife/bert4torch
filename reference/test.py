@@ -7,7 +7,7 @@ from bert4keras import models
 # import pandas as pd
 import os
 
-import transformers
+from transformers.models import albert
 # tokenizer = BertTokenizer.from_pretrained('')
 
 

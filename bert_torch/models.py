@@ -335,38 +335,10 @@ class BertModel(BertPreTrainedModel):
 
 
 class BertForPreTraining(BertPreTrainedModel):
-    """BERT model with pre-training heads.
-    This module comprises the BERT model followed by the two pre-training heads:
-        - the masked language modeling head, and
-        - the next sentence classification head.
-    Params:
-        config: a BertConfig class instance with the configuration to build a new model.
-    Inputs:
-        `masked_lm_labels`: optional masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
-            with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
-            is only computed for the labels set in [0, ..., vocab_size]
-        `next_sentence_label`: optional next sentence classification loss: torch.LongTensor of shape [batch_size]
-            with indices selected in [0, 1].
-            0 => next sentence is the continuation, 1 => next sentence is a random sentence.
-    Outputs:
-        if `masked_lm_labels` and `next_sentence_label` are not `None`:
-            Outputs the total_loss which is the sum of the masked language modeling loss and the next
-            sentence classification loss.
-        if `masked_lm_labels` or `next_sentence_label` is `None`:
-            Outputs a tuple comprising
-            - the masked language modeling logits of shape [batch_size, sequence_length, vocab_size], and
-            - the next sentence classification logits of shape [batch_size, 2].
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-    model = BertForPreTraining(config)
-    masked_lm_logits_scores, seq_relationship_logits = model(input_ids, token_type_ids, input_mask)
-    ```
+    """MLM + NSP
+    输入:
+    `masked_lm_labels`: [batch_size, sequence_length] 包含索引[-1, 0, ..., vocab_size] label=-1不计算损失
+    `next_sentence_label`: [batch_size] 0-连续 1-随机
     """
     def __init__(self, config):
         super(BertForPreTraining, self).__init__(config)
@@ -381,7 +353,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
         if masked_lm_labels is not None and next_sentence_label is not None:
             # CrossEntropyLoss = log_softmax + nLLLoss
-            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            loss_fct = CrossEntropyLoss(ignore_index=-1)  # 索引为-1不计算损失
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
@@ -437,17 +409,8 @@ class BertForMaskedLM(BertPreTrainedModel):
 
 class BertForNextSentencePrediction(BertPreTrainedModel):
     """
-    0 => next sentence is the continuation, 1 => next sentence is a random sentence.
-    Example usage:
-    ```python
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-    model = BertForNextSentencePrediction(config)
-    seq_relationship_logits = model(input_ids, token_type_ids, input_mask)
-    ```
+    0：连续的句子 1：随机的句子
+    第二句中seg_ids填充为0
     """
     def __init__(self, config):
         super(BertForNextSentencePrediction, self).__init__(config)
@@ -663,6 +626,35 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             return total_loss
         else:
             return start_logits, end_logits
+
+
+class ALBERT(BertPreTrainedModel):
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(config, *args, **kwargs)
+        self.embeddings = BertEmbeddings(config)  # embeddings与bert一致
+        self.encoder = BertEncoder(config)
+        self.pooler = Pooler(config)  # if config.with_pool or config.with_nsp else None
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False):
+        if attention_mask is None:
+            # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
+            # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
+            attention_mask = (input_ids > 0).unsqueeze(1).unsqueeze(1)  # mask -> [batch_size, 1, 1, seq_len]
+        else:
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids)
+        if self.config.with_unilm:
+            # TODO add additional mask on attention mask
+            pass
+        emb_output = self.embeddings(input_ids, token_type_ids)
+        encoder_layers = self.encoder(emb_output, attention_mask, output_all_encoded_layers=output_all_encoded_layers)
+        if not output_all_encoded_layers:
+            encoder_layers = encoder_layers[-1]
+        pooled_output = self.pooler(encoder_layers)
+
+        return encoder_layers, pooled_output
 
 
 # class NextSentencePrediction(nn.Module):

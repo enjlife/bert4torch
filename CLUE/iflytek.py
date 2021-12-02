@@ -48,11 +48,11 @@ class Config(object):
     def __init__(self):
         self.pretrained_path = '../pretrained_model/bert-base-chinese'
         self.data_path = '../data/iflytek/'  # train.json, valid.json, test.json
-        self.labels = ['100', '101', '102', '103', '104', '106', '107', '108', '109', '110', '112', '113', '114', '115', '116']  # 类别名单
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
         self.require_improvement = 10000  # early stopping: 1000 batches
         self.num_classes = 119
         self.num_epochs = 3
+        self.num_batches = 0
         self.batch_size = 16
         self.max_len = 128
         self.lr = 2e-5  # 5e-4
@@ -75,7 +75,7 @@ class IFLYTEKTrainer(Trainer):
         self.labels = config.labels
         super(IFLYTEKTrainer, self).__init__(config, model)
 
-    def train(self):
+    def train(self, train_iter=None, dev_iter=None):
         start_time = time.time()
         step = 0
         min_loss = float('inf')
@@ -85,7 +85,7 @@ class IFLYTEKTrainer(Trainer):
         self.model.zero_grad()
         for epoch in range(self.num_epochs):
             logger.info('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-            data_iter = tqdm(self.train_data, desc="EP_%s:%d" % ('train', epoch))  # bar_format="{l_bar}{r_bar}"
+            data_iter = tqdm(train_iter, desc="EP_%s:%d" % ('train', epoch))  # bar_format="{l_bar}{r_bar}"
             for (token_ids, type_ids, labels) in data_iter:
                 token_ids, type_ids, labels = token_ids.to(self.device), type_ids.to(self.device), labels.to(self.device)
                 logits = self.model(token_ids, type_ids)
@@ -99,7 +99,7 @@ class IFLYTEKTrainer(Trainer):
                     self.model.zero_grad()
                     self.scheduler.step()
                 if step % self.log_freq == 0:
-                    dev_loss, dev_acc = self.dev()
+                    dev_loss, dev_acc = self.dev(dev_iter=dev_iter)
                     if dev_loss < min_loss:
                         min_loss = dev_loss
                         self.save_model(epoch)
@@ -119,14 +119,14 @@ class IFLYTEKTrainer(Trainer):
             if flag:
                 break
 
-    def dev(self, data_iter=None):
+    def dev(self, train_iter=None, dev_iter=None):
         # 计算验证集上的损失和准确率
         self.model.eval()
         loss_total = 0.0
         acc_total = 0
         item_total = 0
         with torch.no_grad():
-            for (token_ids, type_ids, labels) in data_iter if data_iter else self.dev_data:
+            for (token_ids, type_ids, labels) in dev_iter:
                 logits = self.model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
@@ -161,8 +161,9 @@ if __name__ == '__main__':
     # data
     train_data = load_dataset(config.data_path + 'train.json')
     dev_data = load_dataset(config.data_path + 'dev.json')
-    config.train_iter = DataIterator(train_data, config.batch_size)
-    config.dev_iter = DataIterator(dev_data, config.batch_size)
+    train_iter = DataIterator(train_data, config.batch_size)
+    dev_iter = DataIterator(dev_data, config.batch_size)
+    config.num_batches = len(train_iter)
 
     set_seed(42)
     cls_model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
