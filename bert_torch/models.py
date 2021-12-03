@@ -338,7 +338,8 @@ class BertForPreTraining(BertPreTrainedModel):
     """MLM + NSP
     输入:
     `masked_lm_labels`: [batch_size, sequence_length] 包含索引[-1, 0, ..., vocab_size] label=-1不计算损失
-    `next_sentence_label`: [batch_size] 0-连续 1-随机
+    `next_sentence_label`: [batch_size] 0-连续的句子 1-随机的句子
+    注意：第二句中seg_ids填充为0
     """
     def __init__(self, config):
         super(BertForPreTraining, self).__init__(config)
@@ -363,30 +364,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
 
 class BertForMaskedLM(BertPreTrainedModel):
-    """BERT model with the masked language modeling head.
-    This module comprises the BERT model followed by the masked language modeling head.
-    Params:
-        config: a BertConfig class instance with the configuration to build a new model.
-    Inputs:
-        `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
-            with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
-            is only computed for the labels set in [0, ..., vocab_size]
-    Outputs:
-        if `masked_lm_labels` is  not `None`:
-            Outputs the masked language modeling loss.
-        if `masked_lm_labels` is `None`:
-            Outputs the masked language modeling logits of shape [batch_size, sequence_length, vocab_size].
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-    model = BertForMaskedLM(config)
-    masked_lm_logits_scores = model(input_ids, token_type_ids, input_mask)
-    ```
+    """MLM: 参考BertForPreTraining MLM部分
     """
     def __init__(self, config):
         super(BertForMaskedLM, self).__init__(config)
@@ -408,9 +386,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
 
 class BertForNextSentencePrediction(BertPreTrainedModel):
-    """
-    0：连续的句子 1：随机的句子
-    第二句中seg_ids填充为0
+    """NSP 参考 BertForPreTraining的NSP部分
     """
     def __init__(self, config):
         super(BertForNextSentencePrediction, self).__init__(config)
@@ -432,6 +408,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
 
 class BertForSequenceClassification(BertPreTrainedModel):
+    """文本分类
+    """
     def __init__(self, config, num_labels):
         super(BertForSequenceClassification, self).__init__(config)
         self.num_labels = num_labels

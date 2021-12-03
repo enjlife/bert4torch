@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../')
 # import unittest
 # from bert4keras.models import build_transformer_model
 # # from bert_pytorch import BERT, BertConfig
@@ -17,6 +19,8 @@ from bert4keras import optimizers
 
 
 from tensorflow import optimizers
+
+
 
 
 

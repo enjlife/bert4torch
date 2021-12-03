@@ -78,6 +78,8 @@ class MultiHeadedSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
+        # (batch_size, seq_len, hidden_size) --> (batch_size, seq_len, num_heads, head_size)
+        # --> (batch_size, num_heads, seq_len, head_size)
         new_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_shape)
         return x.permute(0, 2, 1, 3)
