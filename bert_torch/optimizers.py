@@ -155,8 +155,17 @@ class AdamW(Optimizer):
         """Performs a single optimization step.
 
         Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
+            closure: 计算loss和梯度，返回loss。例如:
+            ```
+            for input, target in dataset:
+                def closure():
+                    optimizer.zero_grad()
+                    output = model(input)
+                    loss = loss_fn(output, target)
+                    loss.backward()
+                    return loss
+                optimizer.step(closure)
+            ```
         """
         loss = None
         if closure is not None:
@@ -392,7 +401,7 @@ class Adafactor(Optimizer):
         eps=(1e-30, 1e-3),
         clip_threshold=1.0,
         decay_rate=-0.8,
-        beta1=None,
+        beta1=None,  # 一阶滑动平均的系数
         weight_decay=0.0,
         scale_parameter=True,
         relative_step=True,
@@ -430,28 +439,30 @@ class Adafactor(Optimizer):
 
     @staticmethod
     def _get_options(param_group, param_shape):
+        """1.判断梯度矩阵形状 2.判断是否使用一阶滑动平均"""
         factored = len(param_shape) >= 2
         use_first_moment = param_group["beta1"] is not None
         return factored, use_first_moment
 
     @staticmethod
     def _rms(tensor):
+        """模长的变种: \sqrt(1\n \sum_{i=1}^n x_i^2)
+        """
         return tensor.norm(2) / (tensor.numel() ** 0.5)
 
     @staticmethod
     def _approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col):
+        """
+        行向量和列向量为均值，则:
+        v_{i,j,t}=v_{i,t}^{r} v_{j,t}^{c} / \sum_{j}v_{j,t}^{c}
+                 =1/n \sum_{j}g_{i,j,t} * 1/m * \sum_{i}g_{i,j,t} / \sum_{j} v_{j,t}^{c}
+                 = exp_avg_sq_row \dot exp_avg_sq_col / exp_avg_sq_row.mean(dim=-1, keepdim=True)
+        """
         r_factor = (exp_avg_sq_row / exp_avg_sq_row.mean(dim=-1, keepdim=True)).rsqrt_()
         c_factor = exp_avg_sq_col.rsqrt()
         return torch.mm(r_factor.unsqueeze(-1), c_factor.unsqueeze(0))
 
     def step(self, closure=None):
-        """
-        Performs a single optimization step
-
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-        """
         loss = None
         if closure is not None:
             loss = closure()
@@ -470,7 +481,7 @@ class Adafactor(Optimizer):
                 grad_shape = grad.shape
 
                 factored, use_first_moment = self._get_options(group, grad_shape)
-                # State Initialization
+                # 初始化state
                 if len(state) == 0:
                     state["step"] = 0
 
@@ -481,6 +492,7 @@ class Adafactor(Optimizer):
                         state["exp_avg_sq_row"] = torch.zeros(grad_shape[:-1]).to(grad)
                         state["exp_avg_sq_col"] = torch.zeros(grad_shape[:-2] + grad_shape[-1:]).to(grad)
                     else:
+                        # 一维梯度不分解
                         state["exp_avg_sq"] = torch.zeros_like(grad)
 
                     state["RMS"] = 0
@@ -500,17 +512,16 @@ class Adafactor(Optimizer):
                 state["step"] += 1
                 state["RMS"] = self._rms(p_data_fp32)
                 lr = self._get_lr(group, state)
-
+                # \beta_{2,t} = 1 - t^{c}
                 beta2t = 1.0 - math.pow(state["step"], group["decay_rate"])
-                update = (grad ** 2) + group["eps"][0]
+                update = (grad ** 2) + group["eps"][0]  # epsilon1
                 if factored:
                     exp_avg_sq_row = state["exp_avg_sq_row"]
                     exp_avg_sq_col = state["exp_avg_sq_col"]
-
+                    
                     exp_avg_sq_row.mul_(beta2t).add_(update.mean(dim=-1), alpha=(1.0 - beta2t))
                     exp_avg_sq_col.mul_(beta2t).add_(update.mean(dim=-2), alpha=(1.0 - beta2t))
-
-                    # Approximation of exponential moving average of square of gradient
+                    # 计算二阶原点矩的近似矩阵
                     update = self._approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col)
                     update.mul_(grad)
                 else:
