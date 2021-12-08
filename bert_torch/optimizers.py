@@ -319,79 +319,7 @@ class AdamW(Optimizer):
 
 
 class Adafactor(Optimizer):
-    """
-    AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
-    https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
-
-    Paper: `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost` https://arxiv.org/abs/1804.04235 Note that
-    this optimizer internally adjusts the learning rate depending on the *scale_parameter*, *relative_step* and
-    *warmup_init* options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
-    `relative_step=False`.
-
-    Arguments:
-        params (:obj:`Iterable[nn.parameter.Parameter]`):
-            Iterable of parameters to optimize or dictionaries defining parameter groups.
-        lr (:obj:`float`, `optional`):
-            The external learning rate.
-        eps (:obj:`Tuple[float, float]`, `optional`, defaults to (1e-30, 1e-3)):
-            Regularization constants for square gradient and parameter scale respectively
-        clip_threshold (:obj:`float`, `optional`, defaults 1.0):
-            Threshold of root mean square of final gradient update
-        decay_rate (:obj:`float`, `optional`, defaults to -0.8):
-            Coefficient used to compute running averages of square
-        beta1 (:obj:`float`, `optional`):
-            Coefficient used for computing running averages of gradient
-        weight_decay (:obj:`float`, `optional`, defaults to 0):
-            Weight decay (L2 penalty)
-        scale_parameter (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If True, learning rate is scaled by root mean square
-        relative_step (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If True, time-dependent learning rate is computed instead of external learning rate
-        warmup_init (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Time-dependent learning rate computation depends on whether warm-up initialization is being used
-
-    This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
-
-    Recommended T5 finetuning settings (https://discuss.huggingface.co/t/t5-finetuning-tips/684/3):
-
-        - Training without LR warmup or clip_threshold is not recommended.
-
-           * use scheduled LR warm-up to fixed LR
-           * use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
-        - Disable relative updates
-        - Use scale_parameter=False
-        - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
-
-        Example::
-
-            Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=1e-3)
-
-        Others reported the following combination to work well::
-
-            Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
-
-        When using ``lr=None`` with :class:`~transformers.Trainer` you will most likely need to use :class:`~transformers.optimization.AdafactorSchedule` scheduler as following::
-
-            from transformers.optimization import Adafactor, AdafactorSchedule
-            optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
-            lr_scheduler = AdafactorSchedule(optimizer)
-            trainer = Trainer(..., optimizers=(optimizer, lr_scheduler))
-
-    Usage::
-
-        # replace AdamW with Adafactor
-        optimizer = Adafactor(
-            model.parameters(),
-            lr=1e-3,
-            eps=(1e-30, 1e-3),
-            clip_threshold=1.0,
-            decay_rate=-0.8,
-            beta1=None,
-            weight_decay=0.0,
-            relative_step=False,
-            scale_parameter=False,
-            warmup_init=False
-        )
+    """实现来自 transformers.optimization.py.Adafactor
     """
 
     def __init__(
@@ -399,13 +327,13 @@ class Adafactor(Optimizer):
         params,
         lr=None,
         eps=(1e-30, 1e-3),
-        clip_threshold=1.0,
-        decay_rate=-0.8,
-        beta1=None,  # 一阶滑动平均的系数
-        weight_decay=0.0,
-        scale_parameter=True,
-        relative_step=True,
-        warmup_init=False,
+        clip_threshold=1.0,  # RMS截断的参数
+        decay_rate=-0.8,  # 计算beta
+        beta1=None,  # 一阶滑动平均的系数,用于确定是否采用一阶动量
+        weight_decay=0.0,  # 权重衰减
+        scale_parameter=True,  # 梯度标准化
+        relative_step=False,  # 自行计算学习率
+        warmup_init=False,  # 使用自行计算学习率，学习率初始化方式
     ):
         # require_version("torch>=1.5.0")  # add_ with alpha
         if lr is not None and relative_step:
@@ -429,9 +357,11 @@ class Adafactor(Optimizer):
     @staticmethod
     def _get_lr(param_group, param_state):
         rel_step_sz = param_group["lr"]
+        # 使用relative_step lr= min(1e-2 or 1e-6 * step, 1/sqrt(step))
         if param_group["relative_step"]:
             min_step = 1e-6 * param_state["step"] if param_group["warmup_init"] else 1e-2
             rel_step_sz = min(min_step, 1.0 / math.sqrt(param_state["step"]))
+        # 梯度标准化 max(epsilon2, RMS(theta))
         param_scale = 1.0
         if param_group["scale_parameter"]:
             param_scale = max(param_group["eps"][1], param_state["RMS"])
@@ -452,11 +382,7 @@ class Adafactor(Optimizer):
 
     @staticmethod
     def _approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col):
-        """
-        行向量和列向量为均值，则:
-        v_{i,j,t}=v_{i,t}^{r} v_{j,t}^{c} / \sum_{j}v_{j,t}^{c}
-                 =1/n \sum_{j}g_{i,j,t} * 1/m * \sum_{i}g_{i,j,t} / \sum_{j} v_{j,t}^{c}
-                 = exp_avg_sq_row \dot exp_avg_sq_col / exp_avg_sq_row.mean(dim=-1, keepdim=True)
+        """计算梯度的近似矩阵：行向量和列向量为均值，相当于近似矩阵除mn,原矩阵同除mn即可
         """
         r_factor = (exp_avg_sq_row / exp_avg_sq_row.mean(dim=-1, keepdim=True)).rsqrt_()
         c_factor = exp_avg_sq_col.rsqrt()
@@ -510,6 +436,7 @@ class Adafactor(Optimizer):
                     p_data_fp32 = p_data_fp32.float()
 
                 state["step"] += 1
+                # RMS(theta)用于梯度标准化
                 state["RMS"] = self._rms(p_data_fp32)
                 lr = self._get_lr(group, state)
                 # \beta_{2,t} = 1 - t^{c}
@@ -521,12 +448,11 @@ class Adafactor(Optimizer):
                     
                     exp_avg_sq_row.mul_(beta2t).add_(update.mean(dim=-1), alpha=(1.0 - beta2t))
                     exp_avg_sq_col.mul_(beta2t).add_(update.mean(dim=-2), alpha=(1.0 - beta2t))
-                    # 计算二阶原点矩的近似矩阵
+                    # 计算二阶原点矩的近似矩阵 update=1/sqrt(v_{t})
                     update = self._approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col)
                     update.mul_(grad)
                 else:
                     exp_avg_sq = state["exp_avg_sq"]
-
                     exp_avg_sq.mul_(beta2t).add_(update, alpha=(1.0 - beta2t))
                     update = exp_avg_sq.rsqrt().mul_(grad)
 
