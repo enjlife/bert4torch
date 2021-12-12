@@ -48,7 +48,7 @@ class DataIterator(DatasetBase):
 class Config(object):
     """配置训练参数"""
     def __init__(self):
-        self.pretrained_path = '../pretrained_model/bert-base-chinese'
+        self.pretrained_path = '../pretrained_model/uer-bert-base'
         self.data_path = '../data/tnews/'  # train.json, valid.json, test.json
         self.labels = ['100', '101', '102', '103', '104', '106', '107', '108', '109', '110', '112', '113', '114', '115', '116']  # 类别名单
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
@@ -68,7 +68,7 @@ class Config(object):
         self.cuda_devices = None
         self.num_warmup_steps_ratio = 0.1  # total_batch的一个比例
         self.log_freq = 1000
-        self.save_path = 'trained_adam.model'
+        self.save_path = 'trained_tnews_uer.model'
         self.with_drop = False  # 分类的全连接层前是否dropout
 
 
@@ -88,7 +88,7 @@ class TNEWSTrainer(Trainer):
         self.model.zero_grad()
         for epoch in range(self.num_epochs):
             logger.info('Epoch [{}/{}]'.format(epoch + 1, config.num_epochs))
-            data_iter = tqdm(train_data, desc="EP_%s:%d" % ('train', epoch))  # bar_format="{l_bar}{r_bar}"
+            data_iter = tqdm(train_iter, desc="EP_%s:%d" % ('train', epoch))  # bar_format="{l_bar}{r_bar}"
             for (token_ids, type_ids, labels) in data_iter:
                 token_ids, type_ids, labels = token_ids.to(self.device), type_ids.to(self.device), labels.to(self.device)
                 logits = self.model(token_ids, type_ids)
@@ -130,6 +130,7 @@ class TNEWSTrainer(Trainer):
         item_total = 0
         with torch.no_grad():
             for (token_ids, type_ids, labels) in dev_iter:
+                token_ids, type_ids, labels = token_ids.to(self.device), type_ids.to(self.device), labels.to(self.device)
                 logits = self.model(token_ids, type_ids)
                 loss = F.cross_entropy(logits, labels)
                 loss_total += loss.item()
@@ -172,7 +173,7 @@ if __name__ == '__main__':
     cls_model = BertForSequenceClassification.from_pretrained(config.pretrained_path, config.num_classes)
     # model.load_state_dict(torch.load('trained2.model'))
     trainer = TNEWSTrainer(config, cls_model)
-    trainer.train()
+    trainer.train(train_iter, dev_iter)
     # loss, acc = trainer.dev()
     # print('loss: %f, acc: %f' % (loss, acc))
     # trainer.test()

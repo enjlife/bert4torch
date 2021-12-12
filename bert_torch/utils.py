@@ -42,8 +42,8 @@ logger = logging.getLogger()
 
 def get_logger(name=None, log_file=None, log_level=logging.INFO):
     """返回唯一的logger，支持console和文件"""
-    log_format = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-                                   datefmt='%m/%d/%Y %H:%M:%S')
+    # logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(name)s - %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
+    log_format = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(message)s', datefmt='%m/%d/%Y %H:%M:%S')
     if name is None:
         name = __name__.split(".")[0]
     global _default_logger

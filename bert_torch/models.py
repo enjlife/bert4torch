@@ -62,7 +62,6 @@ class BertConfig(object):
                  seg_emb=False,
                  with_unilm=False,
                  last_fn='tanh',
-                 with_drop=False,  # 文本分类最后是否添加dropout
                  ):
         """Constructs BertConfig.
         """
@@ -74,7 +73,6 @@ class BertConfig(object):
             # 除了config文件, 补充的参数如下
             self.with_unilm = with_unilm
             self.last_fn = last_fn
-            self.with_drop = with_drop
 
         elif isinstance(vocab_size_or_config_json_file, int):
             self.vocab_size = vocab_size_or_config_json_file
@@ -101,7 +99,6 @@ class BertConfig(object):
             # 补充的参数
             self.with_unilm = with_unilm
             self.last_fn = last_fn
-            self.with_drop = with_drop
         else:
             raise ValueError("First argument must be either a vocabulary size (int)"
                              "or the path to a pretrained model config file (str)")
@@ -237,6 +234,7 @@ class BertPreTrainedModel(nn.Module):
             # Backward compatibility with old naming format
             config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
         config = BertConfig.from_json_file(config_file)
+
         logger.info("Model config \n{}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
@@ -414,14 +412,13 @@ class BertForSequenceClassification(BertPreTrainedModel):
         super(BertForSequenceClassification, self).__init__(config)
         self.num_labels = num_labels
         self.bert = BertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob) if config.with_drop else None
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, num_labels)
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
         _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
-        if self.dropout:
-            pooled_output = self.dropout(pooled_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         if labels is not None:
             loss_fct = CrossEntropyLoss()

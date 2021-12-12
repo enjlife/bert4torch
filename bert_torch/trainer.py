@@ -14,7 +14,7 @@ class Trainer(object):
             raise ValueError('Input device: {} needs GPU, but GPU is not available'.format(config.device))
         self.device = torch.device(config.device)
         self.model = model.to(self.device)
-        if torch.cuda.device_count() > 1 and isinstance(config.cuda_devices, list):
+        if torch.cuda.device_count() > 1 and config.cuda_devices:
             logger.info("Using %d GPUS for model" % torch.cuda.device_count())
             self.model = nn.DataParallel(self.model, device_ids=config.cuda_devices)
         # self.train_data = config.train_iter if hasattr(config, 'train_iter') else []
@@ -34,8 +34,14 @@ class Trainer(object):
         self.scheduler = get_scheduler(config.scheduler, self.optimizer, t_total * config.num_warmup_steps_ratio, t_total)
         self.max_grad_norm = config.max_grad_norm
         self.save_path = config.save_path if hasattr(config, 'save_path') else 'trained.model'
+        self.require_improvement = config.require_improvement
         # 每个epoch结束或具体的step数
-        self.log_freq = config.num_batches - 1 if config.log_freq == 'epoch_end' else config.log_freq
+        if config.log_freq == 'epoch_end':
+            self.log_freq = config.num_batches - 1
+        elif config.log_freq == 'half_epoch':
+            self.log_freq = (config.num_batches - 1) // 2
+        else:
+            self.log_freq = int(config.log_freq)
         logger.info("Total Parameters: %d" % sum([p.nelement() for p in self.model.parameters()]))
 
     def train(self, *args, **kwargs):

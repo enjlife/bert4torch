@@ -46,17 +46,17 @@ class DataIterator(DatasetBase):
 class Config(object):
     """配置训练参数"""
     def __init__(self):
-        self.pretrained_path = '../pretrained_model/bert-base-chinese'
+        self.pretrained_path = '../pretrained_model/uer-bert-base'
         self.data_path = '../data/iflytek/'  # train.json, valid.json, test.json
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')   # 设备
         self.require_improvement = 10000  # early stopping: 1000 batches
         self.num_classes = 119
-        self.num_epochs = 4
+        self.num_epochs = 8
         self.num_batches = 0
         self.batch_size = 16
         self.max_len = 128
         self.lr = 2e-5  # 5e-4
-        self.scheduler = 'CONSTANT_WITH_WARMUP'  # 学习率策略'CONSTANT','CONSTANT_WITH_WARMUP'
+        self.scheduler = 'CONSTANT'  # 学习率策略 'CONSTANT','CONSTANT_WITH_WARMUP'
         self.max_grad_norm = 1.0  # 梯度裁剪
         self.gradient_accumulation_steps = 2
         self.betas = (0.9, 0.999)
