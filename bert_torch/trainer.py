@@ -3,8 +3,11 @@ import logging
 import torch.nn as nn
 from torch.optim import Adam
 from .optimizers import get_scheduler, AdamW
+from .layers import FocalLoss
 
 logger = logging.getLogger()
+
+loss_dict = {'ce': nn.CrossEntropyLoss, 'fl': FocalLoss}
 
 
 class Trainer(object):
@@ -26,6 +29,7 @@ class Trainer(object):
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
         self.optimizer = AdamW(optimizer_grouped_parameters, lr=config.lr, betas=config.betas)
 
+        self.loss_fct = loss_dict[config.loss]()
         self.num_epochs = config.num_epochs
         self.num_batches = config.num_batches
         self.gradient_accumulation_steps = config.gradient_accumulation_steps
