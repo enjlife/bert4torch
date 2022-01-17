@@ -28,6 +28,15 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
 
 
+def get_constant_decay_schedule(optimizer: Optimizer, num_warmup_steps: int, num_training_steps,  last_epoch: int = -1):
+    """freeze_step = num_warmup_step"""
+    def lr_lambda(current_step: int):
+        if current_step < num_warmup_steps:
+            return 1.0
+        return (num_training_steps - current_step) / max(1.0, (num_training_steps - num_warmup_steps))
+    return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
+
+
 # 线性增加，然后不变
 def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: int, last_epoch: int = -1):
 
@@ -68,7 +77,7 @@ def get_cosine_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-# cosine with hard restarts
+# 余弦退火 cosine with hard restarts
 def get_cosine_with_hard_restarts_schedule_with_warmup(
     optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, last_epoch: int = -1
 ):
@@ -114,6 +123,7 @@ SCHEDULER_FUNCTION = {
     'POLYNOMIAL': get_polynomial_decay_schedule_with_warmup,
     'CONSTANT': get_constant_schedule,  # 学习率不变
     'CONSTANT_WITH_WARMUP': get_constant_schedule_with_warmup,  # 线性增加，然后不变
+    'CONSTANT_WITH_DECAY': get_constant_decay_schedule,  # 不变，然后线性降低
 }
 
 
@@ -405,12 +415,11 @@ class Adafactor(Optimizer):
 
                 state = self.state[p]
                 grad_shape = grad.shape
-
+                # 二阶矩是否分解 是否计算一阶动量
                 factored, use_first_moment = self._get_options(group, grad_shape)
                 # 初始化state
                 if len(state) == 0:
                     state["step"] = 0
-
                     if use_first_moment:
                         # Exponential moving average of gradient values
                         state["exp_avg"] = torch.zeros_like(grad)

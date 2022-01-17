@@ -14,11 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import sys
-import shutil
-import tarfile
-import tempfile
 import torch
 import os
 import copy
@@ -28,8 +23,7 @@ from torch.nn import CrossEntropyLoss
 
 from .layers import BertEmbeddings, BertLayerNorm, BertEncoder, Pooler, BertNSPHead, BertPreTrainingHeads, BertMLMHead
 
-from .utils import act2fn, PRETRAINED_MODEL_ARCHIVE_MAP, cached_path, CONFIG_NAME, \
-                    BERT_CONFIG_NAME, get_logger, WEIGHTS_NAME, TF_WEIGHTS_NAME, load_tf_weights_in_bert
+from .utils import act2fn, get_logger, load_tf_weights_in_bert
 
 
 logger = get_logger(__name__)
@@ -63,8 +57,6 @@ class BertConfig(object):
                  with_unilm=False,
                  last_fn='tanh',
                  ):
-        """Constructs BertConfig.
-        """
         if isinstance(vocab_size_or_config_json_file, str):
             with open(vocab_size_or_config_json_file, "r", encoding='utf-8') as reader:
                 json_config = json.loads(reader.read())
@@ -132,8 +124,12 @@ class BertConfig(object):
 
 
 class BertPreTrainedModel(nn.Module):
+    CONFIG_NAME = "config.json"
+    WEIGHTS_NAME = "pytorch_model.bin"
+    BERT_CONFIG_NAME = 'bert_config.json'
+    TF_WEIGHTS_NAME = 'bert_model.ckpt'
     """
-    BERT model : Bidirectional Encoder Representations from Transformers.
+    BERT模型父类
     """
     def __init__(self, config, *args, **kwargs):
         super().__init__()
@@ -159,98 +155,28 @@ class BertPreTrainedModel(nn.Module):
             module.bias.data.zero_()
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        """
-        Instantiate a BertPreTrainedModel from a pre-trained model file or a pytorch state dict.
-        Download and cache the pre-trained model file if needed.
-
-        Params:
-            pretrained_model_name_or_path: either:
-                - a str with the name of a pre-trained model to load selected in the list of:
-                    . `bert-base-uncased`
-                    . `bert-large-uncased`
-                    . `bert-base-cased`
-                    . `bert-large-cased`
-                    . `bert-base-multilingual-uncased`
-                    . `bert-base-multilingual-cased`
-                    . `bert-base-chinese`
-                - a path or url to a pretrained model archive containing:
-                    . `bert_config.json` a configuration file for the model
-                    . `pytorch_model.bin` a PyTorch dump of a BertForPreTraining instance
-                - a path or url to a pretrained model archive containing:
-                    . `bert_config.json` a configuration file for the model
-                    . `model.chkpt` a TensorFlow checkpoint
-            from_tf: should we load the weights from a locally saved TensorFlow checkpoint
-            cache_dir: an optional path to a folder in which the pre-trained models will be cached.
-            state_dict: an optional state dictionnary (collections.OrderedDict object) to use instead of Google pre-trained models
-            *inputs, **kwargs: additional input for the specific Bert class
-                (ex: num_labels for BertForSequenceClassification)
-        """
-        state_dict = kwargs.get('state_dict', None)
+    def from_pretrained(cls, pretrained_model_path, *inputs, **kwargs):
+        state_dict = kwargs.get('state_dict', None)  # 传入模型的参数
         kwargs.pop('state_dict', None)
-        cache_dir = kwargs.get('cache_dir', None)
-        kwargs.pop('cache_dir', None)
-        from_tf = kwargs.get('from_tf', False)
+        from_tf = kwargs.get('from_tf', False)  # tf checkpoint
         kwargs.pop('from_tf', None)
-
-        if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
-            # archive_file: url
-            archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
-        else:
-            # archive_file: local path
-            archive_file = pretrained_model_name_or_path
-        # redirect to the cache, if necessary
-        try:
-            # local path of model
-            resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find any file "
-                "associated to this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_MODEL_ARCHIVE_MAP.keys()),
-                    archive_file))
-            return None
-        if resolved_archive_file == archive_file:
-            logger.info("loading archive file {}".format(archive_file))
-        else:
-            logger.info("loading archive file {} from cache at {}".format(
-                archive_file, resolved_archive_file))
-        tempdir = None
-        if os.path.isdir(resolved_archive_file) or from_tf:
-            serialization_dir = resolved_archive_file
-        else:
-            # Extract archive to temp dir
-            tempdir = tempfile.mkdtemp()
-            logger.info("extracting archive file {} to temp dir {}".format(
-                resolved_archive_file, tempdir))
-            with tarfile.open(resolved_archive_file, 'r:gz') as archive:
-                archive.extractall(tempdir)
-            serialization_dir = tempdir
         # Load config
-        config_file = os.path.join(serialization_dir, CONFIG_NAME)
+        config_file = os.path.join(pretrained_model_path, cls.CONFIG_NAME)
         if not os.path.exists(config_file):
-            # Backward compatibility with old naming format
-            config_file = os.path.join(serialization_dir, BERT_CONFIG_NAME)
+            config_file = os.path.join(pretrained_model_path, cls.BERT_CONFIG_NAME)
         config = BertConfig.from_json_file(config_file)
-        # 打印配置
         # logger.info("Model config \n{}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
         if state_dict is None and not from_tf:
-            weights_path = os.path.join(serialization_dir, WEIGHTS_NAME)
+            weights_path = os.path.join(pretrained_model_path, cls.WEIGHTS_NAME)
             state_dict = torch.load(weights_path, map_location='cpu')
-        if tempdir:
-            # Clean up temp dir
-            shutil.rmtree(tempdir)
         if from_tf:
             # Directly load from a TensorFlow checkpoint
-            weights_path = os.path.join(serialization_dir, TF_WEIGHTS_NAME)
+            weights_path = os.path.join(pretrained_model_path, cls.TF_WEIGHTS_NAME)
             return load_tf_weights_in_bert(model, weights_path)
         # Load from a PyTorch state_dict
-        old_keys = []
-        new_keys = []
+        old_keys, new_keys = [], []
         for key in state_dict.keys():
             new_key = None
             # Layer Norm
@@ -289,7 +215,6 @@ class BertPreTrainedModel(nn.Module):
         start_prefix = ''
         if not hasattr(model, 'bert') and any(s.startswith('bert.') for s in state_dict.keys()):
             start_prefix = 'bert.'
-        # print(start_prefix)
         load(model, prefix=start_prefix)
         if len(missing_keys) > 0:
             logger.warning("Weights of {} not initialized from pretrained model: {}".format(
@@ -302,6 +227,16 @@ class BertPreTrainedModel(nn.Module):
                                 model.__class__.__name__, "\n\t".join(error_msgs)))
         return model
 
+    def freeze_module(self, module_name):
+        module = self.get_submodule(module_name)
+        for param in module.parameters():
+            param.requires_grad = False
+
+    def unfreeze_module(self, module_name):
+        module = self.get_submodule(module_name)
+        for param in module.parameters():
+            param.requires_grad = True
+
 
 class BertModel(BertPreTrainedModel):
     def __init__(self, config, *args, **kwargs):
@@ -311,7 +246,7 @@ class BertModel(BertPreTrainedModel):
         self.pooler = Pooler(config)  # if config.with_pool or config.with_nsp else None
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False):
+    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False, first_last_pooler=False):
         if attention_mask is None:
             # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
             # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
@@ -325,7 +260,10 @@ class BertModel(BertPreTrainedModel):
             pass
         emb_output = self.embeddings(input_ids, token_type_ids)
         encoder_layers = self.encoder(emb_output, attention_mask, output_all_encoded_layers=output_all_encoded_layers)
-        if not output_all_encoded_layers:
+        # 输出第一层和最后一层的向量
+        if first_last_pooler:
+            encoder_layers = (encoder_layers[0] + encoder_layers[-1]) / 2
+        elif not output_all_encoded_layers:
             encoder_layers = encoder_layers[-1]
         pooled_output = self.pooler(encoder_layers)
 
@@ -405,6 +343,31 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             return seq_relationship_score
 
 
+class BertForNSPSequenceClassification(BertPreTrainedModel):
+    """NSP 参考 BertForPreTraining的NSP部分
+    """
+    def __init__(self, config, num_labels2):
+        super(BertForNSPSequenceClassification, self).__init__(config)
+        self.bert = BertModel(config)
+        self.cls = BertNSPHead(config)
+        self.num_labels2 = num_labels2
+        self.classifier2 = nn.Linear(config.hidden_size, num_labels2)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, next_sentence_label=None):
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,output_all_encoded_layers=False)
+        seq_relationship_score = self.cls(pooled_output)
+        logits2 = self.classifier2(pooled_output)
+
+        if next_sentence_label is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-1)
+            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            loss2 = loss_fct(logits2.view(-1, self.num_labels2), next_sentence_label.view(-1))
+            return next_sentence_loss + loss2
+        else:
+            return seq_relationship_score, logits2
+
+
 class BertForSequenceClassification(BertPreTrainedModel):
     """文本分类
     """
@@ -429,32 +392,8 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
 
 class BertForMultipleChoice(BertPreTrainedModel):
-    """BERT model for multiple choice tasks.
-    This module is composed of the BERT model with a linear layer on top of
-    the pooled output.
-    Params:
-        `config`: a BertConfig class instance with the configuration to build a new model.
-        `num_choices`: the number of classes for the classifier. Default = 2.
-    Inputs:
-        `labels`: labels for the classification output: torch.LongTensor of shape [batch_size]
-            with indices selected in [0, ..., num_choices].
-    Outputs:
-        if `labels` is not `None`:
-            Outputs the CrossEntropy classification loss of the output with the labels.
-        if `labels` is `None`:
-            Outputs the classification logits of shape [batch_size, num_labels].
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[[31, 51, 99], [15, 5, 0]], [[12, 16, 42], [14, 28, 57]]])
-    input_mask = torch.LongTensor([[[1, 1, 1], [1, 1, 0]],[[1,1,0], [1, 0, 0]]])
-    token_type_ids = torch.LongTensor([[[0, 0, 1], [0, 1, 0]],[[0, 1, 1], [0, 0, 1]]])
-    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-    num_choices = 2
-    model = BertForMultipleChoice(config, num_choices)
-    logits = model(input_ids, token_type_ids, input_mask)
-    ```
+    """句子选择：默认计算单选loss，可以用于计算多选loss
+    例如：输入，陈述句+备选句1，陈述句+备选句2，陈述句+备选句3，陈述句+备选句4，输出更相关的label
     """
     def __init__(self, config, num_choices):
         super(BertForMultipleChoice, self).__init__(config)
@@ -482,32 +421,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
 
 class BertForTokenClassification(BertPreTrainedModel):
-    """BERT model for token-level classification.
-    This module is composed of the BERT model with a linear layer on top of
-    the full hidden state of the last layer.
-    Params:
-        `config`: a BertConfig class instance with the configuration to build a new model.
-        `num_labels`: the number of classes for the classifier. Default = 2.
-    Inputs:
-        `labels`: labels for the classification output: torch.LongTensor of shape [batch_size, sequence_length]
-            with indices selected in [0, ..., num_labels].
-    Outputs:
-        if `labels` is not `None`:
-            Outputs the CrossEntropy classification loss of the output with the labels.
-        if `labels` is `None`:
-            Outputs the classification logits of shape [batch_size, sequence_length, num_labels].
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-    num_labels = 2
-    model = BertForTokenClassification(config, num_labels)
-    logits = model(input_ids, token_type_ids, input_mask)
-    ```
+    """token 分类
     """
     def __init__(self, config, num_labels):
         super(BertForTokenClassification, self).__init__(config)
@@ -601,6 +515,39 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             return total_loss
         else:
             return start_logits, end_logits
+
+
+class BertForTwoSequenceClassification(BertPreTrainedModel):
+    """两个文本分类任务
+    """
+    def __init__(self, config, num_labels1, num_labels2, first_last_pooler=False):
+        super(BertForTwoSequenceClassification, self).__init__(config)
+        self.num_labels1 = num_labels1
+        self.num_labels2 = num_labels2
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.first_last_pooler = first_last_pooler
+        self.output_all_encoded_layers = first_last_pooler
+        # 为了能够迁移到单分类
+        self.classifier = nn.Linear(config.hidden_size, num_labels1)
+        self.classifier2 = nn.Linear(config.hidden_size, num_labels2)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels1=None, labels2=None):
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
+                                     output_all_encoded_layers=self.output_all_encoded_layers,
+                                     first_last_pooler=self.first_last_pooler)
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        logits2 = self.classifier2(pooled_output)
+
+        if labels1 is not None and labels2 is not None:
+            loss_fct = CrossEntropyLoss()
+            loss1 = loss_fct(logits.view(-1, self.num_labels1), labels1.view(-1))
+            loss2 = loss_fct(logits2.view(-1, self.num_labels2), labels2.view(-1))
+            return loss1 + loss2
+        else:
+            return logits, logits2
 
 
 class ALBERT(BertPreTrainedModel):

@@ -1,5 +1,6 @@
 from .models import BertModel, BertForPreTraining, BertForMaskedLM, \
-    BertForNextSentencePrediction, BertForSequenceClassification, BertConfig
+    BertForNextSentencePrediction, BertForSequenceClassification, BertConfig, BertForTwoSequenceClassification, \
+    BertForNSPSequenceClassification
 from .tokenization import BertTokenizer, BasicTokenizer
 from .dataset import DatasetBase
 from .trainer import Trainer

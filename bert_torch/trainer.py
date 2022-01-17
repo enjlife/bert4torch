@@ -4,10 +4,9 @@ import torch.nn as nn
 from torch.optim import Adam
 from .optimizers import get_scheduler, AdamW
 from .layers import FocalLoss
+from .utils import get_logger
 
-logger = logging.getLogger()
-
-loss_dict = {'ce': nn.CrossEntropyLoss, 'fl': FocalLoss}
+logger = get_logger()
 
 
 class Trainer(object):
@@ -16,6 +15,7 @@ class Trainer(object):
         if config.device != 'cpu' and not torch.cuda.is_available():
             raise ValueError('Input device: {} needs GPU, but GPU is not available'.format(config.device))
         self.device = torch.device(config.device)
+        logger.info('Use device {}'.format(self.device))
         self.model = model.to(self.device)
         if torch.cuda.device_count() > 1 and config.cuda_devices:
             logger.info("Using %d GPUS for model" % torch.cuda.device_count())
@@ -28,14 +28,14 @@ class Trainer(object):
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': config.weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
         self.optimizer = AdamW(optimizer_grouped_parameters, lr=config.lr, betas=config.betas)
-
+        loss_dict = {'ce': nn.CrossEntropyLoss, 'fl': FocalLoss}
         self.loss_fct = loss_dict[config.loss]()
         self.num_epochs = config.num_epochs
         self.num_batches = config.num_batches
         self.gradient_accumulation_steps = config.gradient_accumulation_steps
-        t_total = self.num_epochs * self.num_batches // self.gradient_accumulation_steps
+        self.t_total = self.num_epochs * self.num_batches // self.gradient_accumulation_steps
         # 计算warmup的步数 num_warmup_steps = t_total * num_warmup_steps_ratio (默认0.1)
-        self.scheduler = get_scheduler(config.scheduler, self.optimizer, t_total * config.num_warmup_steps_ratio, t_total)
+        self.scheduler = get_scheduler(config.scheduler, self.optimizer, self.t_total * config.num_warmup_steps_ratio, self.t_total)
         self.max_grad_norm = config.max_grad_norm
         self.save_path = config.save_path if hasattr(config, 'save_path') else 'trained.model'
         self.require_improvement = config.require_improvement

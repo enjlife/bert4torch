@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 import math
 from packaging import version
-from .utils import act2fn
+from .utils import act2fn, apply_chunking_to_forward
 import torch.nn.functional as F
 from torch.autograd import Variable
 
@@ -164,6 +164,221 @@ class MultiHeadedSelfAttention(nn.Module):
         return context_layer
 
 
+class AlbertAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads}"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.hidden_size = config.hidden_size
+        self.attention_head_size = config.hidden_size // config.num_attention_heads
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.attention_dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.output_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pruned_heads = set()
+
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(heads, self.num_attention_heads,
+                                                        self.attention_head_size, self.pruned_heads)
+
+        # Prune linear layers
+        self.query = prune_linear_layer(self.query, index)
+        self.key = prune_linear_layer(self.key, index)
+        self.value = prune_linear_layer(self.value, index)
+        self.dense = prune_linear_layer(self.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.num_attention_heads = self.num_attention_heads - len(heads)
+        self.all_head_size = self.attention_head_size * self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+        mixed_query_layer = self.query(x)
+        mixed_key_layer = self.key(x)
+        mixed_value_layer = self.value(x)
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            seq_length = x.size()[1]
+            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=x.device).view(-1, 1)
+            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=x.device).view(1, -1)
+            distance = position_ids_l - position_ids_r
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+
+            if self.position_embedding_type == "relative_key":
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores
+            elif self.position_embedding_type == "relative_key_query":
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.attention_dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = context_layer.transpose(2, 1).flatten(2)
+
+        projected_context_layer = self.dense(context_layer)
+        projected_context_layer_dropout = self.output_dropout(projected_context_layer)
+        layernormed_context_layer = self.LayerNorm(x + projected_context_layer_dropout)
+        return (layernormed_context_layer, attention_probs) if output_attentions else (layernormed_context_layer,)
+
+
+class AlbertLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+        self.full_layer_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = AlbertAttention(config)
+        self.ffn = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.activation = act2fn[config.hidden_act]
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+                output_hidden_states=False):
+        attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
+        # 分块执行，节省显存 albert-v2 ffn没有dropout
+        ffn_output = apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output[0],)
+        hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
+
+        return (hidden_states,) + attention_output[1:]  # add attentions if we output them
+
+    def ff_chunk(self, attention_output):
+        ffn_output = self.ffn(attention_output)
+        ffn_output = self.activation(ffn_output)
+        ffn_output = self.ffn_output(ffn_output)
+        return ffn_output
+
+
+class AlbertLayerGroup(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
+
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
+    ):
+        layer_hidden_states = ()
+        layer_attentions = ()
+
+        for layer_index, albert_layer in enumerate(self.albert_layers):
+            layer_output = albert_layer(hidden_states, attention_mask, head_mask[layer_index], output_attentions)
+            hidden_states = layer_output[0]
+
+            if output_attentions:
+                layer_attentions = layer_attentions + (layer_output[1],)
+
+            if output_hidden_states:
+                layer_hidden_states = layer_hidden_states + (hidden_states,)
+
+        outputs = (hidden_states,)
+        if output_hidden_states:
+            outputs = outputs + (layer_hidden_states,)
+        if output_attentions:
+            outputs = outputs + (layer_attentions,)
+        return outputs  # last-layer hidden state, (layer hidden states), (layer attentions)
+
+
+class AlbertTransformer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
+        self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        hidden_states = self.embedding_hidden_mapping_in(hidden_states)
+
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        head_mask = [None] * self.config.num_hidden_layers if head_mask is None else head_mask
+
+        for i in range(self.config.num_hidden_layers):
+            # Number of layers in a hidden group
+            layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
+
+            # Index of the hidden group
+            group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
+
+            layer_group_output = self.albert_layer_groups[group_idx](
+                hidden_states,
+                attention_mask,
+                head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+                output_attentions,
+                output_hidden_states,
+            )
+            hidden_states = layer_group_output[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + layer_group_output[-1]
+
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
 class AttentionOutput(nn.Module):
     """
     AttentionOutput -> dropout -> add -> norm
@@ -231,7 +446,8 @@ class BertLayerNorm(nn.Module):
 
 
 class BertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """bert/albert embedding
+    Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super(BertEmbeddings, self).__init__()
@@ -411,196 +627,4 @@ class BertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# class SegmentEmbedding(nn.Embedding):
-#     def __init__(self, embed_size=512):
-#         super().__init__(3, embed_size, padding_idx=0)
-#
-#
-# class TokenEmbedding(nn.Embedding):
-#     def __init__(self, vocab_size, embed_size=512):
-#         super().__init__(vocab_size, embed_size, padding_idx=0)
-
-
-# class MultiHeadedAttention(nn.Module):
-#     def __init__(self, config):
-#         """
-#         used parameter of config:
-#             num_attention_heads, attention_head_size, hidden size, num_qkv, attention_probs_dropout_prob
-#
-#         """
-#         super(MultiHeadedAttention, self).__init__()
-#         if config.hidden_size % config.num_attention_heads != 0:
-#             raise ValueError("The hidden size (%d) is not a multiple of the number of encoder "
-#                              "heads (%d)" % (config.hidden_size, config.num_attention_heads))
-#         self.num_attention_heads = config.num_attention_heads
-#         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-#         self.all_head_size = self.num_attention_heads * self.attention_head_size
-#
-#         if hasattr(config, 'num_qkv') and (config.num_qkv > 1):
-#             self.num_qkv = config.num_qkv
-#         else:
-#             self.num_qkv = 1
-#
-#         self.query = nn.Linear(config.hidden_size, self.all_head_size*self.num_qkv)
-#         self.key = nn.Linear(config.hidden_size, self.all_head_size*self.num_qkv)
-#         self.value = nn.Linear(config.hidden_size, self.all_head_size*self.num_qkv)
-#         self.output_linear = nn.Linear(self.all_head_size, config.hidden_size)
-#
-#         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-#         # not know now
-#         self.uni_debug_flag = True if os.getenv('UNI_DEBUG_FLAG', '') else False
-#
-#         if self.uni_debug_flag:
-#             self.register_buffer('debug_attention_probs', torch.zeros((512, 512)))
-#         if hasattr(config, 'seg_emb') and config.seg_emb:
-#             self.b_q_s = nn.Parameter(torch.zeros(
-#                 1, self.num_attention_heads, 1, self.attention_head_size))
-#             self.seg_emb = nn.Embedding(
-#                 config.type_vocab_size, self.all_head_size)
-#         else:
-#             self.b_q_s = None
-#             self.seg_emb = None
-#
-#     def transpose_for_scores(self, x, mask_qkv=None):
-#         """ view or reshape x and permute x to (batch, head, pos, head_hid)
-#         """
-#         # num_qkv not know now
-#         if self.num_qkv > 1:
-#             sz = x.size()[:-1] + (self.num_qkv, self.num_attention_heads, self.all_head_size)
-#             # (batch, pos, num_qkv, head, head_hid)
-#             x = x.view(*sz)
-#             if mask_qkv is None:
-#                 x = x[:, :, 0, :, :]
-#             elif isinstance(mask_qkv, int):
-#                 x = x[:, :, mask_qkv, :, :]
-#             else:
-#                 # mask_qkv: (batch, pos)
-#                 if mask_qkv.size(1) > sz[1]:
-#                     mask_qkv = mask_qkv[:, :sz[1]]
-#                 # x: (batch, pos, num_qkv, head, head_hid) -> x: (batch, pos, head, head_hid)
-#                 x = x.gather(2, mask_qkv.view(sz[0], sz[1], 1, 1, 1).expand(
-#                     sz[0], sz[1], 1, sz[3], sz[4])).squeeze(2)
-#         else:
-#             sz = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-#             # (batch, pos, head, head_hid)
-#             x = x.view(*sz)
-#         # (batch, head, pos, head_hid)
-#         return x.permute(0, 2, 1, 3)
-#
-#     def forward(self, x, v_mask, unilm_mask=None, history_states=None, mask_qkv=None, seg_ids=None):
-#         """
-#         x: input hidden states
-#         v_mask: encoder mask for padding
-#         unilm_mask: special mask for some LM models, i.e. unilm
-#         """
-#         # history_states for decoder
-#         if history_states is None:
-#             mixed_query_layer = self.query(x)
-#             mixed_key_layer = self.key(x)
-#             mixed_value_layer = self.value(x)
-#         else:
-#             x_states = torch.cat((history_states, x), dim=1)
-#             mixed_query_layer = self.query(x)
-#             mixed_key_layer = self.key(x_states)
-#             mixed_value_layer = self.value(x_states)
-#
-#         query_layer = self.transpose_for_scores(mixed_query_layer, mask_qkv)
-#         key_layer = self.transpose_for_scores(mixed_key_layer, mask_qkv)
-#         value_layer = self.transpose_for_scores(mixed_value_layer, mask_qkv)
-#
-#         # Take the dot product between "query" and "key" to get the raw encoder scores.
-#         # attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-#         # (batch, head, pos, pos)
-#         attention_scores = torch.matmul(
-#             query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
-#         # not know now
-#         if self.seg_emb is not None:
-#             seg_rep = self.seg_emb(seg_ids)
-#             # (batch, pos, head, head_hid)
-#             seg_rep = seg_rep.view(seg_rep.size(0), seg_rep.size(1),
-#                                    self.num_attention_heads, self.attention_head_size)
-#             qs = torch.einsum('bnih,bjnh->bnij', query_layer+self.b_q_s, seg_rep)
-#             attention_scores = attention_scores + qs
-#
-#         if unilm_mask is not None:
-#             attention_scores = attention_scores.masked_fill(unilm_mask == 0, -1e12)
-#         # Apply the encoder mask is (precomputed for all layers in BertModel forward() function)
-#         if v_mask is not None:
-#             attention_scores = attention_scores.masked_fill(v_mask == 0, -1e12)
-#
-#         # Normalize the encoder scores to probabilities.
-#         attention_probs = nn.Softmax(dim=-1)(attention_scores)
-#
-#         if self.uni_debug_flag:
-#             _pos = attention_probs.size(-1)
-#             self.debug_attention_probs[:_pos, :_pos].copy_(attention_probs[0].mean(0).view(_pos, _pos))
-#
-#         # This is actually dropping out entire tokens to attend to, which might
-#         # seem a bit unusual, but is taken from the original Transformer paper.
-#         attention_probs = self.dropout(attention_probs)
-#
-#         context_layer = torch.matmul(attention_probs, value_layer)
-#         # x: (batch, head, pos, head_hid) ->  (batch, pos, head, head_hid)
-#         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-#         # x: (batch, pos, head, head_hid) -> (batch, pos, all_head_size)
-#         res_shape = context_layer.size()[:-2] + (self.all_head_size,)
-#         context_layer = context_layer.view(*res_shape)
-#
-#         return self.output_linear(context_layer)
-
-
-# class Attention(nn.Module):
-#     """
-#     Compute 'Scaled Dot Product Attention
-#     """
-#
-#     def forward(self, query, key, value, mask=None, dropout=None):
-#         scores = torch.matmul(query, key.transpose(-2, -1)) \
-#                  / math.sqrt(query.size(-1))
-#
-#         if mask is not None:
-#             # masked [batch_size, h, seq_len, d_k]
-#             scores = scores.masked_fill(mask == 0, -1e9)
-#
-#         p_attn = F.softmax(scores, dim=-1)
-#
-#         if dropout is not None:
-#             p_attn = dropout(p_attn)
-#
-#         return torch.matmul(p_attn, value), p_attn
-#
-#
-# class MultiHeadedAttention(nn.Module):
-#     """
-#     Take in model size and number of heads.
-#     """
-#
-#     def __init__(self, h, d_model, dropout=0.1):
-#         super().__init__()
-#         assert d_model % h == 0
-#
-#         # We assume d_v always equals d_k
-#         self.d_k = d_model // h
-#         self.h = h
-#
-#         self.linear_layers = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(3)])
-#         self.output_linear = nn.Linear(d_model, d_model)
-#         self.encoder = Attention()
-#
-#         self.dropout = nn.Dropout(p=dropout)
-#
-#     def forward(self, query, key, value, mask=None):
-#         batch_size = query.size(0)
-#
-#         # 1) Do all the linear projections in batch from d_model => h x d_k
-#         query, key, value = [l(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
-#                              for l, x in zip(self.linear_layers, (query, key, value))]
-#
-#         # 2) Apply encoder on all the projected vectors in batch.
-#         x, attn = self.encoder(query, key, value, mask=mask, dropout=self.dropout)
-#
-#         # 3) "Concat" using a view and apply a final linear.
-#         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
-#
-#         return self.output_linear(x)
 

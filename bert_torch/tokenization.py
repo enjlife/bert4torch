@@ -17,34 +17,13 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import collections
-import logging
+import json
 import os
 import unicodedata
 from io import open
+from .utils import get_logger
 
-from .utils import cached_path
-
-logger = logging.getLogger(__name__)
-
-PRETRAINED_VOCAB_ARCHIVE_MAP = {
-    'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    'bert-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
-    'bert-base-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt",
-    'bert-large-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-vocab.txt",
-    'bert-base-multilingual-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-vocab.txt",
-    'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
-    'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-vocab.txt",
-}
-PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
-    'bert-base-uncased': 512,
-    'bert-large-uncased': 512,
-    'bert-base-cased': 512,
-    'bert-large-cased': 512,
-    'bert-base-multilingual-uncased': 512,
-    'bert-base-multilingual-cased': 512,
-    'bert-base-chinese': 512,
-}
-VOCAB_NAME = 'vocab.txt'
+logger = get_logger()
 
 
 def load_vocab(vocab_file):
@@ -72,6 +51,8 @@ def whitespace_tokenize(text):
 
 
 class BertTokenizer(object):
+    VOCAB_NAME = 'vocab.txt'
+    TOKENIZER_CONFIG_NAME = 'tokenizer_config.json'
     """Runs end-to-end tokenization: punctuation splitting + wordpiece"""
 
     def __init__(self, vocab_file, do_lower_case=True, max_len=None, do_basic_tokenize=True,
@@ -81,8 +62,7 @@ class BertTokenizer(object):
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
                 "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
         self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict(
-            [(ids, tok) for tok, ids in self.vocab.items()])
+        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case, never_split=never_split)
@@ -123,7 +103,7 @@ class BertTokenizer(object):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
         if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_NAME)
+            vocab_file = os.path.join(vocab_path, self.VOCAB_NAME)
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
@@ -135,51 +115,23 @@ class BertTokenizer(object):
         return vocab_file
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, cache_dir=None, *inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_path, *inputs, **kwargs):
         """
-        Instantiate a PreTrainedBertModel from a pre-trained model file.
-        Download and cache the pre-trained model file if needed.
+        -cased: 支持大小写 do_lower_case=False
+        -uncased: 支持小写 do_lower_case=True
         """
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-            vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
-            if '-cased' in pretrained_model_name_or_path and kwargs.get('do_lower_case', True):
-                logger.warning("The pre-trained model you are loading is a cased model but you have not set "
-                               "`do_lower_case` to False. We are setting `do_lower_case=False` for you but "
-                               "you may want to check this behavior.")
-                kwargs['do_lower_case'] = False
-            elif '-cased' not in pretrained_model_name_or_path and not kwargs.get('do_lower_case', True):
-                logger.warning("The pre-trained model you are loading is an uncased model but you have set "
-                               "`do_lower_case` to False. We are setting `do_lower_case=True` for you "
-                               "but you may want to check this behavior.")
-                kwargs['do_lower_case'] = True
-        else:
-            vocab_file = pretrained_model_name_or_path
-        if os.path.isdir(vocab_file):
-            vocab_file = os.path.join(vocab_file, VOCAB_NAME)
-        # redirect to the cache, if necessary
-        try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            logger.error(
-                "Model name '{}' was not found in model name list ({}). "
-                "We assumed '{}' was a path or url but couldn't find any file "
-                "associated to this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                    vocab_file))
-            return None
-        if resolved_vocab_file == vocab_file:
-            logger.info("loading vocabulary file {}".format(vocab_file))
-        else:
-            logger.info("loading vocabulary file {} from cache at {}".format(
-                vocab_file, resolved_vocab_file))
-        if pretrained_model_name_or_path in PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP:
-            # if we're using a pretrained model, ensure the tokenizer wont index sequences longer
-            # than the number of positional embeddings
-            max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name_or_path]
-            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
-        # Instantiate tokenizer.
-        tokenizer = cls(resolved_vocab_file, *inputs, **kwargs)
+        vocab_file = os.path.join(pretrained_model_path, cls.VOCAB_NAME)
+        logger.info("loading vocabulary file {}".format(vocab_file))
+
+        kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), 512)
+        # 中文模型, do_lower_case默认设置为True
+        # tokenizer_config_file = os.path.join(pretrained_model_path, cls.TOKENIZER_CONFIG_NAME)
+        # if os.path.isfile(tokenizer_config_file):
+        #     with open(tokenizer_config_file, 'r', encoding='utf8') as reader:
+        #         tokenizer_config = json.loads(reader.read())
+        #         kwargs['do_lower_case'] = tokenizer_config.get('do_lower_case', kwargs.get('do_lower_case', True))
+        # print('do_lower_case: {}'.format(kwargs['do_lower_case']))
+        tokenizer = cls(vocab_file, *inputs, **kwargs)
         return tokenizer
 
 
