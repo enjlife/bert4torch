@@ -237,6 +237,21 @@ class BertPreTrainedModel(nn.Module):
         for param in module.parameters():
             param.requires_grad = True
 
+    def get_submodule(self, target):
+        if target == "":
+            return self
+        atoms = target.split(".")
+        mod: torch.nn.Module = self
+        for item in atoms:
+            if not hasattr(mod, item):
+                raise AttributeError(mod._get_name() + " has no "
+                                     "attribute `" + item + "`")
+            mod = getattr(mod, item)
+            if not isinstance(mod, torch.nn.Module):
+                raise AttributeError("`" + item + "` is not "
+                                     "an nn.Module")
+        return mod
+
 
 class BertModel(BertPreTrainedModel):
     def __init__(self, config, *args, **kwargs):
@@ -246,7 +261,7 @@ class BertModel(BertPreTrainedModel):
         self.pooler = Pooler(config)  # if config.with_pool or config.with_nsp else None
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False, first_last_pooler=False):
+    def forward(self, input_ids, token_type_ids, attention_mask=None, output_all_encoded_layers=False, first_last_avg=False):
         if attention_mask is None:
             # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
             # mask = (input_ids > 0).unsqueeze(1).repeat(1, input_ids.size(1), 1).unsqueeze(1)
@@ -261,7 +276,7 @@ class BertModel(BertPreTrainedModel):
         emb_output = self.embeddings(input_ids, token_type_ids)
         encoder_layers = self.encoder(emb_output, attention_mask, output_all_encoded_layers=output_all_encoded_layers)
         # 输出第一层和最后一层的向量
-        if first_last_pooler:
+        if first_last_avg:
             encoder_layers = (encoder_layers[0] + encoder_layers[-1]) / 2
         elif not output_all_encoded_layers:
             encoder_layers = encoder_layers[-1]
@@ -520,14 +535,14 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 class BertForTwoSequenceClassification(BertPreTrainedModel):
     """两个文本分类任务
     """
-    def __init__(self, config, num_labels1, num_labels2, first_last_pooler=False):
+    def __init__(self, config, num_labels1, num_labels2, first_last_avg=False):
         super(BertForTwoSequenceClassification, self).__init__(config)
         self.num_labels1 = num_labels1
         self.num_labels2 = num_labels2
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.first_last_pooler = first_last_pooler
-        self.output_all_encoded_layers = first_last_pooler
+        self.first_last_avg = first_last_avg
+        self.output_all_encoded_layers = first_last_avg
         # 为了能够迁移到单分类
         self.classifier = nn.Linear(config.hidden_size, num_labels1)
         self.classifier2 = nn.Linear(config.hidden_size, num_labels2)
@@ -536,7 +551,7 @@ class BertForTwoSequenceClassification(BertPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels1=None, labels2=None):
         _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
                                      output_all_encoded_layers=self.output_all_encoded_layers,
-                                     first_last_pooler=self.first_last_pooler)
+                                     first_last_avg=self.first_last_avg)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         logits2 = self.classifier2(pooled_output)

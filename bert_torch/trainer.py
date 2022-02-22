@@ -3,7 +3,7 @@ import logging
 import torch.nn as nn
 from torch.optim import Adam
 from .optimizers import get_scheduler, AdamW
-from .layers import FocalLoss
+from .losses import FocalLoss
 from .utils import get_logger
 
 logger = get_logger()

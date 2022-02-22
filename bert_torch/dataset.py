@@ -8,7 +8,7 @@ class DatasetBase(object):
     def __init__(self, data_list, batch_size, rand=False):
         self.batch_size = batch_size
         self.data_list = data_list
-        self.n_batches = len(data_list) // batch_size
+        self.n_batches = max(1, len(data_list) // batch_size)
         self.residue = False  # 记录batch数量是否为整数
         if len(data_list) % self.n_batches != 0:
             self.residue = True

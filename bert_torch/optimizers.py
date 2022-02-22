@@ -78,10 +78,8 @@ def get_cosine_schedule_with_warmup(
 
 
 # 余弦退火 cosine with hard restarts
-def get_cosine_with_hard_restarts_schedule_with_warmup(
-    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, last_epoch: int = -1
-):
-
+def get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=1,
+                                                       last_epoch=-1):
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
@@ -94,9 +92,8 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
 
 
 # polynomial
-def get_polynomial_decay_schedule_with_warmup(
-    optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=1.0, last_epoch=-1
-):
+def get_polynomial_decay_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=1.0,
+                                              last_epoch=-1):
 
     lr_init = optimizer.defaults["lr"]
     assert lr_init > lr_end, f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})"
